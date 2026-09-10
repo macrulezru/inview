@@ -1,5 +1,7 @@
 # **Inview Vue**
 
+![Inview Vue](https://github.com/macrulezru/assets/blob/master/packages-images/inview-vue-vuecraft.png?raw=true)
+
 Vue 3 composables for scroll, visibility, and viewport-position
 tracking, built on top of
 [`@macrulez/inview-core`](https://www.npmjs.com/package/@macrulez/inview-core).
