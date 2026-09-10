@@ -1,5 +1,7 @@
 # **Inview Nuxt**
 
+![Inview Nuxt](https://github.com/macrulezru/assets/blob/master/packages-images/inview-nuxt-vuecraft.png?raw=true)
+
 Nuxt module wrapping
 [`@macrulez/inview-vue`](https://www.npmjs.com/package/@macrulez/inview-vue):
 auto-imported composables, a client-only plugin that seeds their

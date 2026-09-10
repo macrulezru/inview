@@ -1,5 +1,7 @@
 # **Inview React**
 
+![Inview React](https://github.com/macrulezru/assets/blob/master/packages-images/inview-react-vuecraft.png?raw=true)
+
 React hooks for scroll, visibility, and viewport-position tracking,
 mirroring
 [`@macrulez/inview-vue`](https://www.npmjs.com/package/@macrulez/inview-vue)'s

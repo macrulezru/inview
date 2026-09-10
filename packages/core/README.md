@@ -1,5 +1,7 @@
 # **Inview Core**
 
+![Inview Core](https://github.com/macrulezru/assets/blob/master/packages-images/inview-vuecraft.png?raw=true)
+
 Framework-agnostic engine for scroll tracking, element visibility, and
 viewport-relative position. No Vue, no React — just
 `subscribe`/`unsubscribe` functions that any framework adapter can
