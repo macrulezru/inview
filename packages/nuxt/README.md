@@ -14,9 +14,10 @@ Part of the [inview](https://github.com/macrulezru/inview) monorepo.
 
 ## Features
 
-- **Auto-imports every composable and utility** — `useScroll`, `useElementVisibility`, `useElementViewport`, `useParallaxLayer`, `mapRange`, `bindCSSVar`, `prefersReducedMotion`, `easings` — no explicit `import` anywhere in your app
-- **Module options forwarded through `runtimeConfig`** — `defaultThreshold`/`defaultRootMargin` set once in `nuxt.config.ts` apply everywhere
-- **A client-only plugin seeds those defaults** — reads the runtime config and calls `setViewportDefaults(...)` once, on the client
+- **Auto-imports every composable, utility, and core engine** — `useScroll`, `useElementVisibility`, `useElementViewport`, `useParallaxLayer`, `mapRange`, `bindCSSVar`, `prefersReducedMotion`, `clamp`, `easings`, `staggerDelay`, plus the framework-agnostic layer itself (`createScrollEngine`, `createVisibilityEngine`, `createElementTracker`, `createRevealController`, `observerPool`/`ObserverPool`, `rafLoop`) — no explicit `import` anywhere in your app, and no separate `@macrulez/inview-core` install needed to reach them
+- **`v-reveal` registered globally** — toggles a class/attribute on an element as it enters the viewport, usable in any component's template with no import at all, including directly inside `v-for`
+- **Module options forwarded through `runtimeConfig`** — `defaultThreshold`/`defaultRootMargin`/`defaultOnce` set once in `nuxt.config.ts` apply everywhere
+- **A client-only plugin seeds those defaults** — reads the runtime config and calls `setViewportDefaults(...)` once, on the client, and registers `v-reveal` on the Vue app
 - **Nothing needs `<ClientOnly>`** — the composables are SSR-safe on their own; this module's client-only-ness is only about *when* the defaults get applied
 
 ---
@@ -73,16 +74,38 @@ for the full composable API (options, return shapes, `useParallaxLayer`, etc).
 
 #### What the module does
 
-1. **Auto-imports** every composable and utility from `@macrulez/inview-vue` (`useScroll`, `useElementVisibility`, `useElementViewport`, `useParallaxLayer`, `mapRange`, `bindCSSVar`, `prefersReducedMotion`, `easings`) — no explicit `import` needed in your components.
-2. **Forwards module options** (`defaultThreshold`, `defaultRootMargin`) into `runtimeConfig.public.inview`.
-3. **Registers a client-only plugin** (`runtime/plugin.client.ts`) that reads that runtime config and calls `setViewportDefaults(...)` — so every `useElementVisibility()` call that doesn't pass its own `threshold`/`rootMargin` picks up your configured defaults.
+1. **Auto-imports** every composable, utility, and core engine from `@macrulez/inview-vue` (`useScroll`, `useElementVisibility`, `useElementViewport`, `useParallaxLayer`, `mapRange`, `bindCSSVar`, `prefersReducedMotion`, `clamp`, `easings`, `staggerDelay`, `createScrollEngine`, `createVisibilityEngine`, `createElementTracker`, `createRevealController`, `observerPool`, `ObserverPool`, `rafLoop`) — no explicit `import` needed in your components, and no separate `@macrulez/inview-core` dependency to reach the framework-agnostic layer.
+2. **Forwards module options** (`defaultThreshold`, `defaultRootMargin`, `defaultOnce`) into `runtimeConfig.public.inview`.
+3. **Registers a client-only plugin** (`runtime/plugin.client.ts`) that reads that runtime config and calls `setViewportDefaults(...)` — so every `useElementVisibility()`/`v-reveal`/`<InView>` use that doesn't pass its own options picks up your configured defaults — and registers `v-reveal` globally on the Vue app (`nuxtApp.vueApp.directive('reveal', vReveal)`), so it's usable in any component's template with no import.
 
 #### Module options
 
 | Option | Default | |
 | --- | --- | --- |
-| `defaultThreshold` | `0` | fallback for `useElementVisibility`'s `threshold` |
-| `defaultRootMargin` | `'0px'` | fallback for `useElementVisibility`'s `rootMargin` |
+| `defaultThreshold` | `0` | fallback for `threshold` |
+| `defaultRootMargin` | `'0px'` | fallback for `rootMargin` |
+| `defaultOnce` | `false` | fallback for `once` — applies to `useElementVisibility`, `v-reveal`, and `<InView>` alike |
+
+#### Using `v-reveal` and `createRevealController`
+
+```vue
+<template>
+  <div v-for="item in items" :key="item.id" v-reveal.once class="card">
+    {{ item.title }}
+  </div>
+</template>
+```
+
+`v-reveal` needs no import — the module registers it globally. For a page-wide pass instead of a directive per element (e.g. from a client-only plugin of your own), `createRevealController` is auto-imported too:
+
+```ts
+// plugins/reveal.client.ts
+export default defineNuxtPlugin(() => {
+  createRevealController({ stagger: { step: 70, max: 4 } })
+})
+```
+
+See [`@macrulez/inview-core`'s README](https://www.npmjs.com/package/@macrulez/inview-core) for `createRevealController`'s full option list, including the per-element `data-reveal-*` attribute overrides.
 
 ---
 

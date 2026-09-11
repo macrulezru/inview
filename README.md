@@ -16,8 +16,8 @@ either way.
 | Package | Description |
 | --- | --- |
 | [`@macrulez/inview-core`](packages/core) | Framework-agnostic engine — no Vue, no React, just `subscribe`/`unsubscribe` functions any adapter can wrap. |
-| [`@macrulez/inview-vue`](packages/vue) | Vue 3 composables: `useScroll`, `useElementVisibility`, `useElementViewport`, `useParallaxLayer`. |
-| [`@macrulez/inview-nuxt`](packages/nuxt) | Nuxt module wrapping the Vue package — auto-imports, SSR-safe defaults from `nuxt.config.ts`. |
+| [`@macrulez/inview-vue`](packages/vue) | Vue 3 composables (`useScroll`, `useElementVisibility`, `useElementViewport`, `useParallaxLayer`), a `v-reveal` directive, and an `<InView>` renderless component — plus every core export, re-exported. |
+| [`@macrulez/inview-nuxt`](packages/nuxt) | Nuxt module wrapping the Vue package — auto-imports (composables **and** the core engines), `v-reveal` registered globally, SSR-safe defaults from `nuxt.config.ts`. |
 | [`@macrulez/inview-react`](packages/react) | React hooks on `useSyncExternalStore`, mirroring the Vue adapter's API 1:1. |
 
 ---
@@ -25,11 +25,14 @@ either way.
 ## Features
 
 - **Scroll tracking** — position, direction, progress, and velocity for the window or an element, all derived on one shared `requestAnimationFrame` loop instead of a separate loop per subscriber
-- **Visibility tracking** — reactive `IntersectionObserver`-backed visibility with enter/leave edge detection and a `once` mode; observers are pooled by `(root, rootMargin, threshold)`, so many elements with the same options share one native observer
+- **Visibility tracking** — reactive `IntersectionObserver`-backed visibility with enter/leave edge detection and a `once` mode; observers are pooled by `(root, rootMargin, threshold)` (compared **by value**, so an inline array literal still reuses the pool), so many elements with the same options share one native observer
+- **A reveal controller for markup you don't control element-by-element** — `createRevealController()` scans the DOM for a selector (a class, a `data-*` attribute, or both), toggles a class/attribute on each match as it enters the viewport, and picks up elements added later (an async-rendered list) automatically via `MutationObserver` — no per-element composable/hook call needed. Built-in stagger delay, per-element overrides via `data-reveal-*` attributes.
+- **`v-reveal` directive and `<InView>` component (Vue)** — the same reveal behavior at the single-element level, for when a `v-for` item needs its own `onEnter`/reactive `isVisible` instead of one page-wide controller.
 - **Element viewport position** — an element's bounding rect, how far it's traveled through the viewport (`viewportProgress`, 0..1), and its distance from the viewport's center
 - **A parallax layer primitive** — turns `viewportProgress` into a CSS transform with a configurable speed, axis, edge clamping, and easing, and disables itself under `prefers-reduced-motion` automatically
+- **A stagger delay utility** — `staggerDelay(index, { step, max })` for grid/list reveal effects, instead of hand-rolling `Math.min(i, max) * step` at every call site
 - **SSR-safe everywhere** — every engine and composable/hook returns a static no-op snapshot without a `window`, and starts a real subscription once it's actually running on the client — no `<ClientOnly>` wrapping required
-- **Vue, Nuxt, and React adapters over one core** — the same four capabilities exist as Vue composables, auto-imported Nuxt composables, and React hooks with the same API and behavior
+- **Vue, Nuxt, and React adapters over one core** — the same capabilities exist as Vue composables, auto-imported Nuxt composables/directive, and React hooks with the same API and behavior; **every adapter re-exports the full core** (engines, `ObserverPool`, `createRevealController`, utilities), so installing just one adapter package reaches the framework-agnostic layer too — no separate `@macrulez/inview-core` install needed
 - **Zero peer dependencies in core** — `@macrulez/inview-core` runs anywhere, including outside a framework entirely
 
 ---
@@ -40,6 +43,7 @@ Reveal-on-scroll effects, parallax, a reading-progress indicator — a common en
 
 - **Every component wires up its own scroll listener** — Ten components reacting to scroll means ten `addEventListener("scroll")` calls and ten recalculations per frame. Scroll state instead flows through one shared rAF loop — any number of subscribers, but only one real listener per distinct set of options.
 - **A feed of hundreds of cards, each revealing itself at its own moment** — Watching each one with its own `IntersectionObserver` means hundreds of instances on a single page. Cards that share the same tracking options share one observer instead of spawning one each.
+- **~100 `.reveal` elements across a page, some rendered by a `v-for` after an async fetch** — A single `useElementVisibility()` call is built for one already-known element in `setup()`, not a list that grows after the fact. `createRevealController()` scans for a selector once, toggles a class as each match enters the viewport, and picks up elements added later on its own — no wrapper component per list item.
 - **A Nuxt page renders on the server, where there's no window** — A composable that just throws or returns garbage on the server is a common source of hydration warnings. Every engine and composable is SSR-safe out of the box.
 - **The same tracking logic is needed in both a Vue app and a React app** — A design system, or a project mid-migration where some screens are Vue and some are React. The hooks mirror the composables 1:1 because both are built on the same framework-agnostic core underneath.
 
@@ -142,6 +146,49 @@ const { isVisible } = useElementVisibility(card, { threshold: 0.3, once: true })
   <div ref="card" :class="{ 'is-visible': isVisible }">...</div>
 </template>
 ```
+
+#### Reveal at scale, without per-element wiring
+
+`createRevealController()` scans the DOM once for `selector` (a class, a `data-*` attribute, or both — the default matches either), toggles a class as each match enters the viewport, and keeps watching for elements added later via `MutationObserver` — the whole "~100 `.reveal` elements across dynamically rendered lists" case from a single call, framework-agnostic:
+
+```ts
+import { createRevealController } from '@macrulez/inview-core'
+// or '@macrulez/inview-vue' / '@macrulez/inview-react' — re-exported from both
+
+const controller = createRevealController({
+  selector: '[data-reveal], .reveal', // the default — class or data-attribute, your pick
+  stagger: { step: 70, max: 4 }, // writes a --reveal-delay CSS var based on discovery order
+})
+
+// controller.destroy() when the page/app tears down
+```
+
+```css
+.reveal {
+  opacity: 0;
+  transition: opacity 0.4s ease-out;
+  transition-delay: var(--reveal-delay, 0ms);
+}
+.reveal.in {
+  opacity: 1;
+}
+```
+
+Per-element `data-reveal-*` attributes override the controller's defaults without touching JS — `data-reveal-once="false"`, `data-reveal-threshold="0.5"`, `data-reveal-class="visible"`, `data-reveal-delay="140"`, `data-reveal-group="grid-a"` (stagger counted within a group instead of globally). `once` defaults to `true` here (unlike `useElementVisibility`'s `false`) — a reveal effect almost always wants it.
+
+#### `v-reveal` inside `v-for` (Vue)
+
+For per-item control (a different `onEnter`, or just not wanting one page-wide controller), `v-reveal` works directly inside `v-for` — a directive is DOM-level, not bound to `setup()` the way a composable is:
+
+```vue
+<template>
+  <div v-for="item in items" :key="item.id" v-reveal.once class="card">
+    {{ item.title }}
+  </div>
+</template>
+```
+
+`v-reveal="{ once: true, threshold: 0.3, onEnter: (info) => track(item.id) }"` for per-item options straight off the loop variable.
 
 #### Two layers, two speeds
 

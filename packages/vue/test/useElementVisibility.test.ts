@@ -14,7 +14,7 @@ describe('useElementVisibility', () => {
 
   afterEach(() => {
     mock.restore()
-    setViewportDefaults({ threshold: 0, rootMargin: '0px' })
+    setViewportDefaults({ threshold: 0, rootMargin: '0px', once: false })
   })
 
   it('updates isVisible/ratio when the observer fires', async () => {
@@ -71,6 +71,19 @@ describe('useElementVisibility', () => {
     const observer = MockIntersectionObserver.instances[0]
     expect(observer.thresholds).toEqual([0.5])
     expect(observer.rootMargin).toBe('20px')
+
+    wrapper.unmount()
+  })
+
+  it('falls back to viewportDefaults.once when no once is given', () => {
+    setViewportDefaults({ once: true })
+
+    const el = document.createElement('div')
+    const { wrapper } = withSetup(() => useElementVisibility(ref(el)))
+
+    const observer = MockIntersectionObserver.instances[0]
+    observer.trigger([{ target: el, isIntersecting: true }])
+    expect(observer.elements.has(el)).toBe(false)
 
     wrapper.unmount()
   })

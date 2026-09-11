@@ -1,6 +1,6 @@
 {
   "name": "@macrulez/inview-react",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "React hooks for scroll, visibility and viewport-position tracking, mirroring the Vue adapter's API",
   "license": "MIT",
   "type": "module",

@@ -6,10 +6,27 @@ export interface ModuleOptions {
   defaultThreshold?: number | number[]
   /** default '0px' */
   defaultRootMargin?: string
+  /** default false — applies to useElementVisibility, v-reveal, and <InView> alike */
+  defaultOnce?: boolean
 }
 
 const COMPOSABLES = ['useScroll', 'useElementVisibility', 'useElementViewport', 'useParallaxLayer']
-const UTILS = ['mapRange', 'bindCSSVar', 'prefersReducedMotion', 'easings']
+const UTILS = ['mapRange', 'bindCSSVar', 'prefersReducedMotion', 'easings', 'clamp', 'staggerDelay']
+// Everything below is @macrulez/inview-core, re-exported through
+// @macrulez/inview-vue — the previous version of this module only
+// auto-imported the composables/utils above, so reaching the raw engines
+// (or createRevealController) meant installing @macrulez/inview-core as a
+// separate dependency even though -nuxt already pulls in -vue, which
+// already re-exports all of it.
+const CORE_ENGINES = [
+  'createScrollEngine',
+  'createVisibilityEngine',
+  'createElementTracker',
+  'createRevealController',
+  'observerPool',
+  'ObserverPool',
+  'rafLoop',
+]
 
 const inviewModule: NuxtModule<ModuleOptions> = defineNuxtModule<ModuleOptions>({
   meta: {
@@ -19,21 +36,24 @@ const inviewModule: NuxtModule<ModuleOptions> = defineNuxtModule<ModuleOptions>(
   defaults: {
     defaultThreshold: 0,
     defaultRootMargin: '0px',
+    defaultOnce: false,
   },
   setup(options, nuxt) {
     const resolver = createResolver(import.meta.url)
 
-    for (const name of [...COMPOSABLES, ...UTILS]) {
+    for (const name of [...COMPOSABLES, ...UTILS, ...CORE_ENGINES]) {
       addImports({ name, from: '@macrulez/inview-vue' })
     }
 
     nuxt.options.runtimeConfig.public.inview = {
       defaultThreshold: options.defaultThreshold,
       defaultRootMargin: options.defaultRootMargin,
+      defaultOnce: options.defaultOnce,
     }
 
     // Applies module options on the client only — the underlying composables
-    // are already SSR-safe no-ops, this just seeds their client-side defaults.
+    // are already SSR-safe no-ops, this just seeds their client-side defaults
+    // (and registers the v-reveal directive globally, see plugin.client.ts).
     addPlugin(resolver.resolve('./runtime/plugin.client'))
   },
 })
