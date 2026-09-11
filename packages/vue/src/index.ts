@@ -13,13 +13,17 @@ export type { UseParallaxLayerOptions, UseParallaxLayerReturn } from './useParal
 export { setViewportDefaults, viewportDefaults } from './config'
 export type { ViewportDefaults } from './config'
 
-export { mapRange, bindCSSVar, prefersReducedMotion, easings } from '@macrulez/inview-core'
-export type {
-  ScrollDirection,
-  ScrollState,
-  IntersectionEdge,
-  IntersectionInfo,
-  DOMRectLike,
-  Easing,
-  EasingName,
-} from '@macrulez/inview-core'
+export { vReveal } from './vReveal'
+export type { RevealDirectiveOptions } from './vReveal'
+
+export { InView } from './InView'
+
+// Every @macrulez/inview-core export — createScrollEngine,
+// createVisibilityEngine, createElementTracker, ObserverPool/observerPool,
+// rafLoop, createRevealController, staggerDelay, the utilities, and their
+// types — is re-exported here too, so installing just @macrulez/inview-vue
+// reaches the framework-agnostic layer directly (e.g.
+// createRevealController for a page-wide "class=reveal, anywhere in the
+// DOM, including elements that don't exist yet" pass) without a separate
+// dependency on @macrulez/inview-core.
+export * from '@macrulez/inview-core'

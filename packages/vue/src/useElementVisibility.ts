@@ -52,7 +52,7 @@ export function useElementVisibility(
         threshold: options.threshold ?? viewportDefaults.threshold,
         rootMargin: options.rootMargin ?? viewportDefaults.rootMargin,
         root: toValue(options.root) ?? null,
-        once: options.once,
+        once: options.once ?? viewportDefaults.once,
         onEnter: options.onEnter,
         onLeave: options.onLeave,
       },

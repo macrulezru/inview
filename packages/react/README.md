@@ -20,6 +20,7 @@ Part of the [inview](https://github.com/macrulezru/inview) monorepo.
 - **`useElementVisibility()`** — `IntersectionObserver`-backed visibility, with enter/leave edge detection and a `once` mode; elements sharing the same options reuse a single observer
 - **`useElementViewport()`** — an element's rect, `viewportProgress` (0..1 through the viewport), and distance from the viewport's center
 - **`useParallaxLayer()`** — a ready-made "layer with its own scroll speed" primitive built on `useElementViewport`, disabling itself automatically under `prefers-reduced-motion`
+- **The full `@macrulez/inview-core` surface, re-exported** — `createRevealController`, `createScrollEngine`, `createVisibilityEngine`, `ObserverPool`, `staggerDelay`, and the rest are all available straight from `@macrulez/inview-react` too, no separate core install needed — useful for `createRevealController` in particular, since a page-wide DOM scan isn't really per-component state a hook would model well
 - **Same API as the Vue adapter, same behavior** — built on `useSyncExternalStore`, so it plays correctly with concurrent rendering
 - **SSR-safe by design** — a static snapshot on the server, a real subscription only once mounted on the client
 
@@ -142,10 +143,21 @@ function Parallax() {
 
 Automatically disables itself (`style.transform = 'none'`) under `prefers-reduced-motion: reduce`.
 
-#### Low-level utilities
+#### Low-level utilities and engines
 
-Re-exported from core: `mapRange`, `bindCSSVar`, `prefersReducedMotion`, `easings`. See
-[`@macrulez/inview-core`'s README](https://www.npmjs.com/package/@macrulez/inview-core).
+Every [`@macrulez/inview-core`](https://www.npmjs.com/package/@macrulez/inview-core) export is re-exported here — `createScrollEngine`, `createVisibilityEngine`, `createElementTracker`, `createRevealController`, `ObserverPool`/`observerPool`, `rafLoop`, `mapRange`, `bindCSSVar`, `prefersReducedMotion`, `clamp`, `staggerDelay`, `easings`, and their types.
+
+```tsx
+import { createRevealController } from '@macrulez/inview-react'
+
+useEffect(() => {
+  const controller = createRevealController({ stagger: { step: 70, max: 4 } })
+  return () => controller.destroy()
+}, [])
+```
+
+`createRevealController` scans the DOM for `.reveal`/`[data-reveal]` elements (configurable) and toggles a class as each enters the viewport, including ones added later — a page-wide pass rather than per-component state, so it's a plain function call in an effect rather than its own hook. See
+[`@macrulez/inview-core`'s README](https://www.npmjs.com/package/@macrulez/inview-core) for its full option list, including per-element `data-reveal-*` overrides.
 
 ---
 

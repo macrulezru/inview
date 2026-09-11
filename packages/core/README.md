@@ -18,9 +18,10 @@ Framework adapters:
 ## Features
 
 - **A scroll engine on one shared rAF loop** — position, direction, progress, and velocity for the window or an element, all derived on one shared `requestAnimationFrame` loop ([`rafLoop`](./src/raf-loop.ts)) instead of a separate one per subscriber
-- **A visibility engine with a pooled `IntersectionObserver`** — enter/leave edge detection and a `once` mode; observers are pooled by `(root, rootMargin, threshold)` ([`ObserverPool`](./src/observer-pool.ts)) instead of one per observed element
+- **A visibility engine with a pooled `IntersectionObserver`** — enter/leave edge detection and a `once` mode; observers are pooled by `(root, rootMargin, threshold)` ([`ObserverPool`](./src/observer-pool.ts)) instead of one per observed element. The pool key compares a `threshold` array **by value** (`[0, 0.5].join(',')`), not by reference — a fresh inline array literal on every call still reuses the pool.
+- **A DOM-scanning reveal controller** — `createRevealController()` finds elements by selector (class, `data-*` attribute, or both), toggles a class/attribute as each enters the viewport, and keeps watching for new matches via `MutationObserver` — for markup you don't wire up element-by-element (a `v-for`/`.map()` list, especially one rendered after an async fetch).
 - **Element viewport tracking** — an element's bounding rect, how far it's traveled through the viewport, and its distance from the viewport's center, updated on the shared rAF loop
-- **Standalone utilities** — `mapRange`, `bindCSSVar`, `prefersReducedMotion`, `clamp`, and a set of easing presets, usable on their own
+- **Standalone utilities** — `mapRange`, `bindCSSVar`, `prefersReducedMotion`, `clamp`, `staggerDelay`, and a set of easing presets, usable on their own
 - **SSR-safe everywhere** — constructing any engine without a `window` returns a no-op object with a static zero-value state instead of throwing
 - **Zero runtime dependencies, zero peer dependencies** — usable standalone in any environment, including outside a framework entirely
 
@@ -94,6 +95,51 @@ const stop = engine.observe(
 ```
 
 `edge` is one of `'enter-top' | 'enter-bottom' | 'leave-top' | 'leave-bottom'`, derived from which side of the root the element crossed. Pass your own `ObserverPool` instance (`new ObserverPool()`) if you need isolation from the module-wide default pool — mainly useful in tests.
+
+`threshold` arrays are pooled by **value**, not by reference (`ObserverPool`'s key joins the array into a string) — passing a fresh `{ threshold: [0, 0.5] }` literal on every call still reuses the same native observer for matching elements, no need to hoist the array to a shared constant yourself.
+
+#### `createRevealController(options?)`
+
+Scans the DOM for elements matching a selector and toggles a class/attribute on each as it enters the viewport — the "many elements, some not in the DOM yet" case `createVisibilityEngine`'s one-element-at-a-time `observe()` doesn't cover on its own. Built entirely on the pooled visibility engine above; a `MutationObserver` (default: watching `document.body`) picks up elements added later and unobserves ones removed.
+
+```ts
+import { createRevealController } from '@macrulez/inview-core'
+
+const controller = createRevealController({
+  selector: '[data-reveal], .reveal', // default — class or data-attribute, either works
+  activeClass: 'in', // default
+  once: true, // default — unlike createVisibilityEngine's own `false`
+  stagger: { step: 70, max: 4 }, // writes --reveal-delay based on discovery order; false to disable
+})
+
+controller.refresh() // manual re-scan (rarely needed — watchMutations covers this by default)
+controller.destroy() // stops observing and disconnects the MutationObserver
+```
+
+Every option has a per-element `data-reveal-*` override that wins over the controller's own default:
+
+| Attribute | Overrides |
+| --- | --- |
+| `data-reveal-once="false"` | `once` |
+| `data-reveal-threshold="0,0.25,0.5"` | `threshold` (comma-separated for an array) |
+| `data-reveal-root-margin="-10% 0px"` | `rootMargin` |
+| `data-reveal-class="visible"` | `activeClass`, for that element only |
+| `data-reveal-delay="140"` | an explicit stagger delay (ms), skipping the computed one |
+| `data-reveal-group="grid-a"` | counts the stagger index within this group instead of globally |
+
+`activeAttribute` (e.g. `'data-reveal-active'`) sets a boolean attribute alongside — or instead of — `activeClass`, for styling purely by attribute selector without a class at all.
+
+#### `staggerDelay(index, options?)`
+
+```ts
+import { staggerDelay } from '@macrulez/inview-core'
+
+staggerDelay(3) // '180ms' (index * 60ms default step)
+staggerDelay(10, { step: 70, max: 4 }) // '280ms' — index capped at 4 so a long list doesn't wait almost a second
+staggerDelay(2, { step: 500, unit: 's' }) // '1s'
+```
+
+`createRevealController`'s `stagger` option is built on this — call it directly for a `v-for`/`.map()` reveal effect written by hand instead of through the controller.
 
 #### `createElementTracker(el)`
 

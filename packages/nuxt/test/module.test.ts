@@ -34,7 +34,7 @@ describe('@macrulez/inview-nuxt module', () => {
     addPlugin.mockClear()
   })
 
-  it('auto-imports every composable and utility from @macrulez/inview-vue', async () => {
+  it('auto-imports every composable, utility, and core engine from @macrulez/inview-vue', async () => {
     const { default: inviewModule } = await import('../src/module')
     const nuxt = createMockNuxt()
 
@@ -52,6 +52,15 @@ describe('@macrulez/inview-nuxt module', () => {
         'bindCSSVar',
         'prefersReducedMotion',
         'easings',
+        'clamp',
+        'staggerDelay',
+        'createScrollEngine',
+        'createVisibilityEngine',
+        'createElementTracker',
+        'createRevealController',
+        'observerPool',
+        'ObserverPool',
+        'rafLoop',
       ])
     )
     for (const call of addImports.mock.calls) {
@@ -74,11 +83,12 @@ describe('@macrulez/inview-nuxt module', () => {
     const nuxt = createMockNuxt()
 
     // @ts-expect-error see above
-    inviewModule({ defaultThreshold: 0.5, defaultRootMargin: '30px' }, nuxt)
+    inviewModule({ defaultThreshold: 0.5, defaultRootMargin: '30px', defaultOnce: true }, nuxt)
 
     expect(nuxt.options.runtimeConfig.public.inview).toEqual({
       defaultThreshold: 0.5,
       defaultRootMargin: '30px',
+      defaultOnce: true,
     })
   })
 
@@ -92,6 +102,7 @@ describe('@macrulez/inview-nuxt module', () => {
     expect(nuxt.options.runtimeConfig.public.inview).toEqual({
       defaultThreshold: 0,
       defaultRootMargin: '0px',
+      defaultOnce: false,
     })
   })
 })

@@ -10,13 +10,13 @@ export type { UseElementViewportReturn } from './useElementViewport'
 export { useParallaxLayer } from './useParallaxLayer'
 export type { UseParallaxLayerOptions, UseParallaxLayerReturn } from './useParallaxLayer'
 
-export { mapRange, bindCSSVar, prefersReducedMotion, easings } from '@macrulez/inview-core'
-export type {
-  ScrollDirection,
-  ScrollState,
-  IntersectionEdge,
-  IntersectionInfo,
-  DOMRectLike,
-  Easing,
-  EasingName,
-} from '@macrulez/inview-core'
+// Every @macrulez/inview-core export — createScrollEngine,
+// createVisibilityEngine, createElementTracker, ObserverPool/observerPool,
+// rafLoop, createRevealController, staggerDelay, the utilities, and their
+// types — is re-exported here too, so installing just @macrulez/inview-react
+// reaches the framework-agnostic layer directly (e.g.
+// createRevealController for a page-wide "class=reveal, anywhere in the
+// DOM, including elements that don't exist yet" pass — there's no React
+// hook for this, since it isn't per-component state at all) without a
+// separate dependency on @macrulez/inview-core.
+export * from '@macrulez/inview-core'
