@@ -138,6 +138,42 @@ describe('createRevealController', () => {
     controller.destroy()
   })
 
+  it('sets an inline transition-delay in addition to the CSS var by default', () => {
+    document.body.innerHTML = '<div class="reveal" id="a"></div><div class="reveal" id="b"></div>'
+    const controller = createRevealController({ stagger: { step: 70 } })
+
+    const a = document.getElementById('a') as HTMLElement
+    const b = document.getElementById('b') as HTMLElement
+    expect(a.style.getPropertyValue('--reveal-delay')).toBe('0ms')
+    expect(a.style.transitionDelay).toBe('0ms')
+    expect(b.style.getPropertyValue('--reveal-delay')).toBe('70ms')
+    expect(b.style.transitionDelay).toBe('70ms')
+
+    controller.destroy()
+  })
+
+  it('skips the inline transition-delay when applyInlineDelay is false', () => {
+    document.body.innerHTML = '<div class="reveal"></div>'
+    const el = document.querySelector('.reveal') as HTMLElement
+    const controller = createRevealController({ stagger: { step: 70, applyInlineDelay: false } })
+
+    expect(el.style.getPropertyValue('--reveal-delay')).toBe('0ms')
+    expect(el.style.transitionDelay).toBe('')
+
+    controller.destroy()
+  })
+
+  it('skips the CSS var but still sets the inline delay when cssVar is null', () => {
+    document.body.innerHTML = '<div class="reveal"></div>'
+    const el = document.querySelector('.reveal') as HTMLElement
+    const controller = createRevealController({ stagger: { step: 70, cssVar: null } })
+
+    expect(el.style.getPropertyValue('--reveal-delay')).toBe('')
+    expect(el.style.transitionDelay).toBe('0ms')
+
+    controller.destroy()
+  })
+
   it('picks up elements added to the DOM later via MutationObserver', async () => {
     const controller = createRevealController()
     expect(MockIntersectionObserver.instances.length).toBe(0)

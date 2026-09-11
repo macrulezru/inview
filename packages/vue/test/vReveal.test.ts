@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent, h, withDirectives } from 'vue'
+import { defineComponent, h, ref, withDirectives } from 'vue'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { vReveal, type RevealDirectiveOptions } from '../src/vReveal'
 import { setViewportDefaults } from '../src/config'
@@ -9,6 +9,19 @@ function mountWithReveal(value?: RevealDirectiveOptions, modifiers: Record<strin
   const Comp = defineComponent({
     render() {
       return withDirectives(h('div'), [[vReveal, value, undefined, modifiers]])
+    },
+  })
+  return mount(Comp)
+}
+
+function mountWithDynamicReveal(getValue: (tick: number) => RevealDirectiveOptions | undefined) {
+  const Comp = defineComponent({
+    setup() {
+      const tick = ref(0)
+      return { tick }
+    },
+    render() {
+      return withDirectives(h('div'), [[vReveal, getValue(this.tick)]])
     },
   })
   return mount(Comp)
@@ -103,5 +116,47 @@ describe('vReveal', () => {
       { target: wrapper.element, isIntersecting: false, boundingClientRect: { top: -100 } as DOMRectReadOnly },
     ])
     expect(onLeave).toHaveBeenCalledTimes(1)
+  })
+
+  describe('shallow-compare on update', () => {
+    it('does not resubscribe when a new binding object has the same field values', async () => {
+      wrapper = mountWithDynamicReveal(() => ({ once: false, threshold: 0.5, rootMargin: '10px', class: 'in' }))
+      const unobserveSpy = vi.spyOn(MockIntersectionObserver.prototype, 'unobserve')
+
+      ;(wrapper.vm as unknown as { tick: number }).tick++
+      await wrapper.vm.$nextTick()
+
+      expect(unobserveSpy).not.toHaveBeenCalled()
+    })
+
+    it('resubscribes when a field value actually changes', async () => {
+      wrapper = mountWithDynamicReveal((tick) => ({ once: false, threshold: tick === 0 ? 0.5 : 0.9 }))
+      const unobserveSpy = vi.spyOn(MockIntersectionObserver.prototype, 'unobserve')
+
+      ;(wrapper.vm as unknown as { tick: number }).tick++
+      await wrapper.vm.$nextTick()
+
+      expect(unobserveSpy).toHaveBeenCalled()
+    })
+
+    it('treats a threshold array as equal by value, not reference', async () => {
+      wrapper = mountWithDynamicReveal(() => ({ once: false, threshold: [0, 0.5] }))
+      const unobserveSpy = vi.spyOn(MockIntersectionObserver.prototype, 'unobserve')
+
+      ;(wrapper.vm as unknown as { tick: number }).tick++
+      await wrapper.vm.$nextTick()
+
+      expect(unobserveSpy).not.toHaveBeenCalled()
+    })
+
+    it('ignores onEnter/onLeave identity changes', async () => {
+      wrapper = mountWithDynamicReveal(() => ({ once: false, onEnter: () => {}, onLeave: () => {} }))
+      const unobserveSpy = vi.spyOn(MockIntersectionObserver.prototype, 'unobserve')
+
+      ;(wrapper.vm as unknown as { tick: number }).tick++
+      await wrapper.vm.$nextTick()
+
+      expect(unobserveSpy).not.toHaveBeenCalled()
+    })
   })
 })

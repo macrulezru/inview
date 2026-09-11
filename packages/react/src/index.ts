@@ -4,6 +4,12 @@ export type { UseScrollOptions, UseScrollReturn } from './useScroll'
 export { useElementVisibility } from './useElementVisibility'
 export type { UseElementVisibilityOptions, UseElementVisibilityReturn } from './useElementVisibility'
 
+export { InviewProvider, useInviewDefaults } from './context'
+export type { ViewportDefaults, InviewProviderProps } from './context'
+
+export { InView } from './InView'
+export type { InViewProps } from './InView'
+
 export { useElementViewport } from './useElementViewport'
 export type { UseElementViewportReturn } from './useElementViewport'
 

@@ -129,6 +129,18 @@ Every option has a per-element `data-reveal-*` override that wins over the contr
 
 `activeAttribute` (e.g. `'data-reveal-active'`) sets a boolean attribute alongside — or instead of — `activeClass`, for styling purely by attribute selector without a class at all.
 
+By default the computed stagger delay is written both as the `--reveal-delay` CSS var **and** as an inline `transition-delay` style on the element itself. The inline style is what actually wins the cascade — a `.card { transition: ... }` rule a consumer declares later (a hover transition, say) would otherwise silently override `--reveal-delay`-based `transition-delay` without `!important`. The CSS var keeps being written too (it's what an inheriting selector like `.reveal > .icon { transition-delay: var(--reveal-delay) }` needs, since an inline style doesn't inherit to descendants):
+
+```ts
+createRevealController({
+  stagger: {
+    step: 70,
+    cssVar: '--reveal-delay', // default. pass null to skip writing the CSS var entirely
+    applyInlineDelay: true, // default. pass false to only write the CSS var, no inline style
+  },
+})
+```
+
 #### `staggerDelay(index, options?)`
 
 ```ts
@@ -137,9 +149,14 @@ import { staggerDelay } from '@macrulez/inview-core'
 staggerDelay(3) // '180ms' (index * 60ms default step)
 staggerDelay(10, { step: 70, max: 4 }) // '280ms' — index capped at 4 so a long list doesn't wait almost a second
 staggerDelay(2, { step: 500, unit: 's' }) // '1s'
+
+// mode: 'cycle' wraps back to 0 past max instead of flattening — a repeating
+// wave (0,70,140,210,0,70,140,210,...) for long lists/grids instead of every
+// item past index 3 sharing the same delay:
+staggerDelay(5, { step: 70, max: 3, mode: 'cycle' }) // '70ms' (index 5 wraps to the same slot as index 1)
 ```
 
-`createRevealController`'s `stagger` option is built on this — call it directly for a `v-for`/`.map()` reveal effect written by hand instead of through the controller.
+`createRevealController`'s `stagger` option is built on this — call it directly for a `v-for`/`.map()` reveal effect written by hand instead of through the controller, and pass `mode` through the same way.
 
 #### `createElementTracker(el)`
 
@@ -157,6 +174,17 @@ tracker.subscribe((state) => {
 - `rect` — a plain `{ top, left, right, bottom, width, height }` snapshot of `getBoundingClientRect()`.
 - `viewportProgress` — 0..1, from the element entering at the viewport's bottom edge to leaving at its top edge. The core value parallax effects are built on.
 - `distanceFromCenter` — px offset between the element's center and the viewport's center (negative = above center).
+
+#### `ObserverPool.stats()`
+
+Debug-only introspection into the shared observer pool — how many native `IntersectionObserver` instances are actually alive, and how many elements sit on each, to verify pooling is collapsing observers as expected (e.g. when suspecting a fresh inline `threshold` array every render is fragmenting the pool instead of reusing it):
+
+```ts
+import { observerPool } from '@macrulez/inview-core'
+
+observerPool.stats()
+// [{ key: 'window|0px|0,0.5', elementCount: 12 }, { key: 'r|0px|0', elementCount: 3 }]
+```
 
 #### Utilities
 

@@ -18,7 +18,7 @@ either way.
 | [`@macrulez/inview-core`](packages/core) | Framework-agnostic engine — no Vue, no React, just `subscribe`/`unsubscribe` functions any adapter can wrap. |
 | [`@macrulez/inview-vue`](packages/vue) | Vue 3 composables (`useScroll`, `useElementVisibility`, `useElementViewport`, `useParallaxLayer`), a `v-reveal` directive, and an `<InView>` renderless component — plus every core export, re-exported. |
 | [`@macrulez/inview-nuxt`](packages/nuxt) | Nuxt module wrapping the Vue package — auto-imports (composables **and** the core engines), `v-reveal` registered globally, SSR-safe defaults from `nuxt.config.ts`. |
-| [`@macrulez/inview-react`](packages/react) | React hooks on `useSyncExternalStore`, mirroring the Vue adapter's API 1:1. |
+| [`@macrulez/inview-react`](packages/react) | React hooks on `useSyncExternalStore`, mirroring the Vue adapter's API 1:1 — including an `<InView>` render-prop component and an `<InviewProvider>` for app-level defaults. |
 
 ---
 
@@ -27,10 +27,10 @@ either way.
 - **Scroll tracking** — position, direction, progress, and velocity for the window or an element, all derived on one shared `requestAnimationFrame` loop instead of a separate loop per subscriber
 - **Visibility tracking** — reactive `IntersectionObserver`-backed visibility with enter/leave edge detection and a `once` mode; observers are pooled by `(root, rootMargin, threshold)` (compared **by value**, so an inline array literal still reuses the pool), so many elements with the same options share one native observer
 - **A reveal controller for markup you don't control element-by-element** — `createRevealController()` scans the DOM for a selector (a class, a `data-*` attribute, or both), toggles a class/attribute on each match as it enters the viewport, and picks up elements added later (an async-rendered list) automatically via `MutationObserver` — no per-element composable/hook call needed. Built-in stagger delay, per-element overrides via `data-reveal-*` attributes.
-- **`v-reveal` directive and `<InView>` component (Vue)** — the same reveal behavior at the single-element level, for when a `v-for` item needs its own `onEnter`/reactive `isVisible` instead of one page-wide controller.
+- **`v-reveal` directive and `<InView>` component (Vue), `<InView>` and `<InviewProvider>` (React)** — the same reveal behavior at the single-element level, for when a `v-for`/mapped item needs its own `onEnter`/reactive `isVisible` instead of one page-wide controller.
 - **Element viewport position** — an element's bounding rect, how far it's traveled through the viewport (`viewportProgress`, 0..1), and its distance from the viewport's center
 - **A parallax layer primitive** — turns `viewportProgress` into a CSS transform with a configurable speed, axis, edge clamping, and easing, and disables itself under `prefers-reduced-motion` automatically
-- **A stagger delay utility** — `staggerDelay(index, { step, max })` for grid/list reveal effects, instead of hand-rolling `Math.min(i, max) * step` at every call site
+- **A stagger delay utility** — `staggerDelay(index, { step, max, mode })` for grid/list reveal effects, instead of hand-rolling the delay math at every call site; `mode: 'cycle'` wraps back to 0 past `max` for a repeating wave instead of flattening
 - **SSR-safe everywhere** — every engine and composable/hook returns a static no-op snapshot without a `window`, and starts a real subscription once it's actually running on the client — no `<ClientOnly>` wrapping required
 - **Vue, Nuxt, and React adapters over one core** — the same capabilities exist as Vue composables, auto-imported Nuxt composables/directive, and React hooks with the same API and behavior; **every adapter re-exports the full core** (engines, `ObserverPool`, `createRevealController`, utilities), so installing just one adapter package reaches the framework-agnostic layer too — no separate `@macrulez/inview-core` install needed
 - **Zero peer dependencies in core** — `@macrulez/inview-core` runs anywhere, including outside a framework entirely

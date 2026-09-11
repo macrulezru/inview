@@ -53,6 +53,33 @@ function unbind(el: HTMLElement) {
   stops.delete(el)
 }
 
+function normalizeThreshold(threshold: number | number[] | undefined): string | number | undefined {
+  return Array.isArray(threshold) ? threshold.join(',') : threshold
+}
+
+// Compares only the fields that actually affect the observer subscription
+// (class/attribute/once/threshold/rootMargin/root) — onEnter/onLeave are
+// intentionally excluded, same as the rest of the package's composables,
+// where non-option fields aren't reactive. This lets a fresh inline options
+// object every re-render (the common case in a template) skip the
+// unsubscribe/resubscribe cycle as long as those field values didn't
+// actually change.
+function optionsEqual(
+  a: RevealDirectiveOptions | null | undefined,
+  b: RevealDirectiveOptions | null | undefined
+): boolean {
+  const av = a ?? {}
+  const bv = b ?? {}
+  return (
+    av.class === bv.class &&
+    av.attribute === bv.attribute &&
+    av.once === bv.once &&
+    av.rootMargin === bv.rootMargin &&
+    av.root === bv.root &&
+    normalizeThreshold(av.threshold) === normalizeThreshold(bv.threshold)
+  )
+}
+
 /**
  * `v-reveal` — toggles a class (default `"in"`) and/or a data-attribute on
  * an element as it enters the viewport, without calling
@@ -74,6 +101,7 @@ export const vReveal: Directive<HTMLElement, RevealDirectiveOptions | undefined>
   mounted: bind,
   updated(el, binding) {
     if (binding.value === binding.oldValue) return
+    if (optionsEqual(binding.value, binding.oldValue)) return
     unbind(el)
     bind(el, binding)
   },

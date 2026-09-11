@@ -61,4 +61,40 @@ describe('ObserverPool', () => {
 
     expect(observer.elements.size).toBe(0)
   })
+
+  describe('stats', () => {
+    it('reports an empty list when nothing is observed', () => {
+      expect(observerPool.stats()).toEqual([])
+    })
+
+    it('reports one entry per pooled key with its element count', () => {
+      const elA = document.createElement('div')
+      const elB = document.createElement('div')
+      const elC = document.createElement('div')
+
+      observerPool.observe(elA, { threshold: 0.5 }, () => {})
+      observerPool.observe(elB, { threshold: 0.5 }, () => {})
+      observerPool.observe(elC, { threshold: 1 }, () => {})
+
+      const stats = observerPool.stats()
+      expect(stats).toHaveLength(2)
+      expect(stats).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ elementCount: 2 }),
+          expect.objectContaining({ elementCount: 1 }),
+        ])
+      )
+    })
+
+    it('drops an entry once its observer disconnects', () => {
+      const el = document.createElement('div')
+      const unobserve = observerPool.observe(el, { threshold: 0 }, () => {})
+
+      expect(observerPool.stats()).toHaveLength(1)
+
+      unobserve()
+
+      expect(observerPool.stats()).toEqual([])
+    })
+  })
 })

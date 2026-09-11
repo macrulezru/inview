@@ -5,8 +5,19 @@ import type { ObserverPool } from './observer-pool'
 import type { IntersectionInfo } from './types'
 
 export interface RevealStaggerOptions extends StaggerDelayOptions {
-  /** CSS custom property the computed delay is written to. default '--reveal-delay' */
-  cssVar?: string
+  /** CSS custom property the computed delay is written to. default '--reveal-delay'. pass null to not write it. */
+  cssVar?: string | null
+  /**
+   * Also sets the `transition-delay` inline style on the element itself, in
+   * addition to `cssVar`. An inline style wins the cascade regardless of any
+   * `transition` shorthand a consumer declares later (e.g. a `.card`
+   * hover-transition), which would otherwise silently swallow the stagger's
+   * transition-delay. The CSS var keeps being written (unless `cssVar` is
+   * null) since, unlike the inline style, it's inheritable — useful for
+   * targeting descendants (`.reveal > .icon { transition-delay: var(--reveal-delay) }`).
+   * default true
+   */
+  applyInlineDelay?: boolean
 }
 
 export interface RevealControllerOptions {
@@ -92,7 +103,8 @@ export function createRevealController(options: RevealControllerOptions = {}): R
   const activeAttribute = options.activeAttribute ?? null
   const defaultOnce = options.once ?? true
   const stagger = options.stagger === false ? null : (options.stagger ?? {})
-  const staggerCssVar = stagger?.cssVar ?? DEFAULT_STAGGER_CSS_VAR
+  const staggerCssVar = stagger && stagger.cssVar !== undefined ? stagger.cssVar : DEFAULT_STAGGER_CSS_VAR
+  const applyInlineDelay = stagger?.applyInlineDelay ?? true
   const watchRoot = options.watchRoot ?? document.body
 
   const engine = createVisibilityEngine(options.pool)
@@ -123,12 +135,13 @@ export function createRevealController(options: RevealControllerOptions = {}): R
 
     if (stagger && el instanceof HTMLElement) {
       const explicitDelay = readAttr(el, 'delay')
-      if (explicitDelay != null) {
-        bindCSSVar(el, staggerCssVar, `${explicitDelay}ms`)
-      } else {
-        const group = readAttr(el, 'group') ?? ''
-        bindCSSVar(el, staggerCssVar, staggerDelay(nextStaggerIndex(group), stagger))
-      }
+      const delayValue =
+        explicitDelay != null
+          ? `${explicitDelay}ms`
+          : staggerDelay(nextStaggerIndex(readAttr(el, 'group') ?? ''), stagger)
+
+      if (staggerCssVar !== null) bindCSSVar(el, staggerCssVar, delayValue)
+      if (applyInlineDelay) el.style.setProperty('transition-delay', delayValue)
     }
 
     const unobserve = engine.observe(

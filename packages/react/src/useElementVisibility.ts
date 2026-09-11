@@ -1,5 +1,6 @@
 import { useCallback, useRef, useSyncExternalStore } from 'react'
 import { createVisibilityEngine, type IntersectionInfo } from '@macrulez/inview-core'
+import { useInviewDefaults } from './context'
 
 export interface UseElementVisibilityOptions {
   /** default 0 */
@@ -35,6 +36,10 @@ export function useElementVisibility(
   const optionsRef = useRef(options)
   optionsRef.current = options
 
+  const defaults = useInviewDefaults()
+  const defaultsRef = useRef(defaults)
+  defaultsRef.current = defaults
+
   const stateRef = useRef<UseElementVisibilityReturn>(emptyState)
 
   const subscribe = useCallback(
@@ -46,13 +51,14 @@ export function useElementVisibility(
 
       stateRef.current = emptyState
       const opts = optionsRef.current
+      const def = defaultsRef.current
       const unobserve = engine.observe(
         target,
         {
-          threshold: opts.threshold,
-          rootMargin: opts.rootMargin,
+          threshold: opts.threshold ?? def.threshold,
+          rootMargin: opts.rootMargin ?? def.rootMargin,
           root: opts.root ?? null,
-          once: opts.once,
+          once: opts.once ?? def.once,
           onEnter: opts.onEnter,
           onLeave: opts.onLeave,
         },

@@ -20,6 +20,8 @@ Part of the [inview](https://github.com/macrulezru/inview) monorepo.
 - **`useElementVisibility()`** — `IntersectionObserver`-backed visibility, with enter/leave edge detection and a `once` mode; elements sharing the same options reuse a single observer
 - **`useElementViewport()`** — an element's rect, `viewportProgress` (0..1 through the viewport), and distance from the viewport's center
 - **`useParallaxLayer()`** — a ready-made "layer with its own scroll speed" primitive built on `useElementViewport`, disabling itself automatically under `prefers-reduced-motion`
+- **`<InviewProvider>` / `useInviewDefaults()`** — app-level `threshold`/`rootMargin`/`once` defaults for `useElementVisibility` and `<InView>`, the React equivalent of the Vue adapter's `setViewportDefaults()`, so you don't repeat the same options at every call site
+- **`<InView>` render-prop component** — same idea as `useElementVisibility`, but as a component for when the element you're measuring is the one being conditionally rendered, not one you already have a ref to
 - **The full `@macrulez/inview-core` surface, re-exported** — `createRevealController`, `createScrollEngine`, `createVisibilityEngine`, `ObserverPool`, `staggerDelay`, and the rest are all available straight from `@macrulez/inview-react` too, no separate core install needed — useful for `createRevealController` in particular, since a page-wide DOM scan isn't really per-component state a hook would model well
 - **Same API as the Vue adapter, same behavior** — built on `useSyncExternalStore`, so it plays correctly with concurrent rendering
 - **SSR-safe by design** — a static snapshot on the server, a real subscription only once mounted on the client
@@ -102,7 +104,37 @@ Elements sharing the same `threshold`/`rootMargin`/`root` reuse a single `Inters
 | `once` | `false` | stop observing after the first intersection |
 | `onEnter` / `onLeave` | — | called with `{ isIntersecting, intersectionRatio, boundingClientRect, edge }` |
 
-Unlike the Vue adapter, this hook doesn't read `viewportDefaults`/`setViewportDefaults` — those are Vue/Nuxt-only. `threshold`/`rootMargin` default to `0`/`'0px'` here purely from the shared core observer pool's own fallback.
+`threshold`/`rootMargin`/`once` fall back to `<InviewProvider>`'s defaults when the hook is rendered inside one (see below), and to `0`/`'0px'`/`false` otherwise — the same as the Vue adapter's `viewportDefaults`, just read from React context instead of a module-level object. Options passed directly to the hook always win over the provider.
+
+#### `<InviewProvider>` / `useInviewDefaults()`
+
+App-level fallback for `threshold`/`rootMargin`/`once`, read by `useElementVisibility` and `<InView>` alike:
+
+```tsx
+import { InviewProvider } from '@macrulez/inview-react'
+
+function App() {
+  return (
+    <InviewProvider defaults={{ threshold: 0.2, once: true }}>
+      <Page />
+    </InviewProvider>
+  )
+}
+```
+
+Any `useElementVisibility(el, { threshold: 0.6 })` call inside `<Page>` still gets `threshold: 0.6` — explicit options always take priority over the provider. `useInviewDefaults()` reads the same value directly, for a custom component that wants the resolved defaults without going through `useElementVisibility`.
+
+#### `<InView>`
+
+Render-prop wrapper around `useElementVisibility` for when the element being measured is the one whose render depends on the result — e.g. lazily mounting a heavy child once it's visible — where a `useState`-backed callback ref would just be extra boilerplate around the same thing:
+
+```tsx
+import { InView } from '@macrulez/inview-react'
+
+<InView once>{({ isVisible }) => (isVisible ? <Heavy /> : null)}</InView>
+```
+
+Always renders one real wrapping element (`as`, default `'div'`) since an `IntersectionObserver` needs an actual element to measure. Accepts the same `once`/`threshold`/`rootMargin`/`root`/`onEnter`/`onLeave` options as `useElementVisibility`, plus `as` for the wrapper tag.
 
 #### `useElementViewport(target)`
 

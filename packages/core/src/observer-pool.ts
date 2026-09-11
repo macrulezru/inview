@@ -7,6 +7,13 @@ interface Pool {
   callbacks: Map<Element, Set<EntryCallback>>
 }
 
+export interface ObserverPoolStat {
+  /** the (root, rootMargin, threshold) pooling key this native IntersectionObserver was created for */
+  key: string
+  /** number of distinct elements currently observed on this native observer */
+  elementCount: number
+}
+
 function keyFor(options: ObserverPoolOptions): string {
   const threshold = Array.isArray(options.threshold) ? options.threshold.join(',') : String(options.threshold ?? 0)
   const root = options.root ? 'r' : 'window'
@@ -67,6 +74,20 @@ export class ObserverPool {
         this.pools.delete(key)
       }
     }
+  }
+
+  /**
+   * Debug-only introspection: how many native IntersectionObserver
+   * instances are currently pooled, and how many elements sit on each — for
+   * verifying the (root, rootMargin, threshold) pooling is actually
+   * collapsing observers as expected in a given app, instead of silently
+   * fragmenting because a new inline threshold array is passed every render.
+   */
+  stats(): ObserverPoolStat[] {
+    return Array.from(this.pools.entries()).map(([key, pool]) => ({
+      key,
+      elementCount: pool.callbacks.size,
+    }))
   }
 }
 
