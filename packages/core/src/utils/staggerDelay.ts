@@ -5,6 +5,13 @@ export interface StaggerDelayOptions {
   max?: number
   /** unit suffix on the returned string. default 'ms' */
   unit?: 'ms' | 's'
+  /**
+   * 'linear' (default) grows then flattens at `max` — the classic
+   * reveal-on-scroll ceiling. 'cycle' wraps back to 0 once past `max`,
+   * producing a repeating wave (0,1,2,3,0,1,2,3,...) for long lists/grids
+   * instead of everything past index `max` sharing the same delay.
+   */
+  mode?: 'linear' | 'cycle'
 }
 
 /**
@@ -13,7 +20,10 @@ export interface StaggerDelayOptions {
  * hand-roll `Math.min(i, max) * step` themselves at every call site.
  */
 export function staggerDelay(index: number, options: StaggerDelayOptions = {}): string {
-  const { step = 60, max = Infinity, unit = 'ms' } = options
-  const ms = Math.max(0, Math.min(index, max)) * step
+  const { step = 60, max = Infinity, unit = 'ms', mode = 'linear' } = options
+  const clampedIndex = Math.max(0, index)
+  const effectiveIndex =
+    mode === 'cycle' && Number.isFinite(max) ? clampedIndex % (max + 1) : Math.min(clampedIndex, max)
+  const ms = effectiveIndex * step
   return unit === 's' ? `${ms / 1000}s` : `${ms}ms`
 }

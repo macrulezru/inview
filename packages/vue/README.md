@@ -177,6 +177,8 @@ Toggles a class (default `"in"`) and/or a data-attribute on the bound element as
 
 Unlike a per-`v-for`-item composable (not actually possible — composables are called once in `setup()`, not per loop iteration), a directive is DOM-level and just works on however many elements render, including ones added later by the same `v-for`.
 
+A fresh inline options object on every re-render (the common case — `v-reveal="{ once: true, onEnter: ... }"` builds a new object literal each time) doesn't force a re-subscribe: `class`/`attribute`/`once`/`threshold`/`rootMargin`/`root` are compared by value (a `threshold` array by its joined contents), not by reference, and `onEnter`/`onLeave` identity is ignored entirely — the directive only unsubscribes and resubscribes when one of those values actually changed.
+
 For a page-wide pass instead of a directive on every element, see `createRevealController` in the "Low-level utilities" section below.
 
 #### `<InView>`
