@@ -1,6 +1,6 @@
 {
   "name": "@macrulez/inview-nuxt",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Nuxt module wrapping @macrulez/inview-vue: auto-imported composables/core engines, a globally registered v-reveal directive, client-only guard, module options for default thresholds/once",
   "license": "MIT",
   "type": "module",
