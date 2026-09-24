@@ -129,7 +129,9 @@ Every option has a per-element `data-reveal-*` override that wins over the contr
 
 `activeAttribute` (e.g. `'data-reveal-active'`) sets a boolean attribute alongside — or instead of — `activeClass`, for styling purely by attribute selector without a class at all.
 
-By default the computed stagger delay is written both as the `--reveal-delay` CSS var **and** as an inline `transition-delay` style on the element itself. The inline style is what actually wins the cascade — a `.card { transition: ... }` rule a consumer declares later (a hover transition, say) would otherwise silently override `--reveal-delay`-based `transition-delay` without `!important`. The CSS var keeps being written too (it's what an inheriting selector like `.reveal > .icon { transition-delay: var(--reveal-delay) }` needs, since an inline style doesn't inherit to descendants):
+By default the computed stagger delay is written both as the `--reveal-delay` CSS var **and** as an inline `transition-delay` style on the element itself. The inline style is what actually wins the cascade — a `.card { transition: ... }` rule a consumer declares later (a hover transition, say) would otherwise silently override `--reveal-delay`-based `transition-delay` without `!important`. The CSS var keeps being written too (it's what an inheriting selector like `.reveal > .icon { transition-delay: var(--reveal-delay) }` needs, since an inline style doesn't inherit to descendants).
+
+Both are automatically **removed again** once the element's reveal-in transition ends (`transitionend`, with a computed-duration-based fallback timer for when no transition actually runs, e.g. `prefers-reduced-motion`). The delay only exists to stagger that one transition — left on the element afterward, it would also silently delay anything else that transitions there, like a hover effect on a `.reveal` link. This isn't configurable; it's the point of scoping the delay to the reveal in the first place.
 
 ```ts
 createRevealController({

@@ -244,6 +244,100 @@ describe('createRevealController', () => {
     controller.destroy()
   })
 
+  it('clears the inline transition-delay and CSS var once the reveal transition ends', () => {
+    document.body.innerHTML = '<div class="reveal" id="a"></div><div class="reveal" id="b"></div>'
+    const b = document.getElementById('b') as HTMLElement
+    const controller = createRevealController({ stagger: { step: 70 } })
+
+    MockIntersectionObserver.instances[0].trigger([{ target: b, isIntersecting: true }])
+    expect(b.style.transitionDelay).toBe('70ms')
+    expect(b.style.getPropertyValue('--reveal-delay')).toBe('70ms')
+
+    b.dispatchEvent(new Event('transitionend'))
+    expect(b.style.transitionDelay).toBe('')
+    expect(b.style.getPropertyValue('--reveal-delay')).toBe('')
+
+    controller.destroy()
+  })
+
+  it('does not let the stagger delay bleed into a later hover transition on the same element', () => {
+    // Simulates the real-world case: a `.reveal` element that is ALSO a link
+    // with its own hover transition — once the reveal-in transition ends,
+    // the inline transition-delay it used must be gone, or the next
+    // (unrelated) transition on this element inherits the same delay.
+    document.body.innerHTML = '<a class="reveal" href="#" id="link"></a>'
+    const el = document.getElementById('link') as HTMLElement
+    const controller = createRevealController({ stagger: { step: 200 } })
+
+    MockIntersectionObserver.instances[0].trigger([{ target: el, isIntersecting: true }])
+    expect(el.style.transitionDelay).toBe('0ms')
+
+    el.dispatchEvent(new Event('transitionend'))
+    expect(el.style.transitionDelay).toBe('')
+
+    // A later, unrelated hover-triggered transition is free to set its own
+    // delay (or none) without any leftover reveal delay interfering.
+    el.style.setProperty('transition-delay', '0ms')
+    expect(el.style.transitionDelay).toBe('0ms')
+
+    controller.destroy()
+  })
+
+  it('falls back to a computed-duration timer when no transitionend ever fires', () => {
+    vi.useFakeTimers()
+    try {
+      document.body.innerHTML = '<div class="reveal" id="a" style="transition-duration: 0.3s"></div>'
+      const el = document.getElementById('a') as HTMLElement
+      const controller = createRevealController({ stagger: { step: 100 } })
+
+      MockIntersectionObserver.instances[0].trigger([{ target: el, isIntersecting: true }])
+      expect(el.style.transitionDelay).toBe('0ms')
+
+      vi.advanceTimersByTime(300 + 50)
+      expect(el.style.transitionDelay).toBe('')
+
+      controller.destroy()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reapplies and re-clears the stagger delay on every entry when once is false', () => {
+    document.body.innerHTML = '<div class="reveal" id="a"></div>'
+    const el = document.getElementById('a') as HTMLElement
+    const controller = createRevealController({ stagger: { step: 90 }, once: false })
+    const observer = MockIntersectionObserver.instances[0]
+
+    observer.trigger([{ target: el, isIntersecting: true }])
+    expect(el.style.transitionDelay).toBe('0ms')
+    el.dispatchEvent(new Event('transitionend'))
+    expect(el.style.transitionDelay).toBe('')
+
+    observer.trigger([{ target: el, isIntersecting: false }])
+    observer.trigger([{ target: el, isIntersecting: true }])
+    expect(el.style.transitionDelay).toBe('0ms')
+    el.dispatchEvent(new Event('transitionend'))
+    expect(el.style.transitionDelay).toBe('')
+
+    controller.destroy()
+  })
+
+  it('clears a pending stagger cleanup when the element is removed from the DOM', async () => {
+    document.body.innerHTML = '<div class="reveal" id="a"></div>'
+    const el = document.getElementById('a') as HTMLElement
+    const controller = createRevealController({ stagger: { step: 100 } })
+
+    MockIntersectionObserver.instances[0].trigger([{ target: el, isIntersecting: true }])
+    expect(el.style.transitionDelay).toBe('0ms')
+
+    el.remove()
+    await flushMutations()
+
+    expect(el.style.transitionDelay).toBe('')
+
+    controller.destroy()
+  })
+
   it('stops observing and disconnects the mutation watcher on destroy', async () => {
     document.body.innerHTML = '<div class="reveal"></div>'
     const controller = createRevealController()

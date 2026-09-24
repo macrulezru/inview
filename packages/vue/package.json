@@ -1,6 +1,6 @@
 {
   "name": "@macrulez/inview-vue",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Vue 3 composables for scroll, visibility and viewport-position tracking",
   "license": "MIT",
   "type": "module",
