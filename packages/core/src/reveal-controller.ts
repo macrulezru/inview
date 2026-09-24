@@ -1,6 +1,5 @@
 import { createVisibilityEngine } from './visibility-engine'
 import { staggerDelay, type StaggerDelayOptions } from './utils/staggerDelay'
-import { bindCSSVar } from './utils/bindCSSVar'
 import type { ObserverPool } from './observer-pool'
 import type { IntersectionInfo } from './types'
 
@@ -16,6 +15,16 @@ export interface RevealStaggerOptions extends StaggerDelayOptions {
    * null) since, unlike the inline style, it's inheritable — useful for
    * targeting descendants (`.reveal > .icon { transition-delay: var(--reveal-delay) }`).
    * default true
+   *
+   * Whichever of the two get written, both are automatically REMOVED again
+   * once the element's reveal-in transition finishes (`transitionend`, with
+   * a computed-duration-based fallback timer for when no transition actually
+   * runs — `prefers-reduced-motion`, or no matching CSS `transition` at all).
+   * The delay only exists to stagger that one transition; left in place
+   * afterward, it would silently delay anything else that transitions on the
+   * same element too (a hover effect on a `.reveal` link, for example) —
+   * this cleanup is not configurable, it's the whole point of the delay
+   * being scoped to the reveal in the first place.
    */
   applyInlineDelay?: boolean
 }
@@ -110,6 +119,9 @@ export function createRevealController(options: RevealControllerOptions = {}): R
   const engine = createVisibilityEngine(options.pool)
   const teardownByEl = new Map<Element, () => void>()
   const staggerCounts = new Map<string, number>()
+  const pendingStaggerCleanup = new WeakMap<HTMLElement, () => void>()
+  const staggerCssVarName =
+    staggerCssVar !== null ? (staggerCssVar.startsWith('--') ? staggerCssVar : `--${staggerCssVar}`) : null
 
   function nextStaggerIndex(group: string): number {
     const current = staggerCounts.get(group) ?? 0
@@ -125,6 +137,62 @@ export function createRevealController(options: RevealControllerOptions = {}): R
     }
   }
 
+  function writeStaggerDelay(el: HTMLElement, delayValue: string) {
+    if (staggerCssVarName !== null) el.style.setProperty(staggerCssVarName, delayValue)
+    if (applyInlineDelay) el.style.setProperty('transition-delay', delayValue)
+  }
+
+  function clearStaggerDelay(el: HTMLElement) {
+    if (staggerCssVarName !== null) el.style.removeProperty(staggerCssVarName)
+    if (applyInlineDelay) el.style.removeProperty('transition-delay')
+  }
+
+  // Parses a possibly comma-separated CSS <time> list (as `transition-duration`
+  // is when several properties transition with different durations) and
+  // returns the largest value in ms — used only to size the cleanup fallback
+  // timer below, so overestimating slightly (taking the max, not the value
+  // for whichever property actually matters) is harmless.
+  function maxMs(cssTimeList: string): number {
+    return cssTimeList.split(',').reduce((max, part) => {
+      const trimmed = part.trim()
+      const value = parseFloat(trimmed)
+      if (Number.isNaN(value)) return max
+      const ms = trimmed.endsWith('ms') ? value : value * 1000
+      return Math.max(max, ms)
+    }, 0)
+  }
+
+  // The stagger delay only needs to exist for the duration of the reveal-in
+  // transition it was written for — left in place afterward, it silently
+  // delays anything else that transitions on the same element too (e.g. a
+  // hover effect on a `.reveal` link), since `transition-delay` is a single
+  // cascading property, not scoped to just the reveal's own transition. Once
+  // that transition settles (or, if it never actually runs — no matching CSS
+  // `transition`, or `prefers-reduced-motion` disabling it — once a
+  // conservative fallback timer elapses), the delay is removed again.
+  function scheduleStaggerCleanup(el: HTMLElement, delayValue: string) {
+    pendingStaggerCleanup.get(el)?.()
+
+    const fallbackMs = maxMs(delayValue) + maxMs(getComputedStyle(el).transitionDuration) + 50
+    let finished = false
+
+    const finish = () => {
+      if (finished) return
+      finished = true
+      el.removeEventListener('transitionend', finish)
+      el.removeEventListener('transitioncancel', finish)
+      clearTimeout(timeoutId)
+      pendingStaggerCleanup.delete(el)
+      clearStaggerDelay(el)
+    }
+
+    el.addEventListener('transitionend', finish)
+    el.addEventListener('transitioncancel', finish)
+    const timeoutId = setTimeout(finish, fallbackMs)
+
+    pendingStaggerCleanup.set(el, finish)
+  }
+
   function observeOne(el: Element) {
     if (teardownByEl.has(el)) return
 
@@ -133,15 +201,14 @@ export function createRevealController(options: RevealControllerOptions = {}): R
     const elThreshold = parseThreshold(readAttr(el, 'threshold')) ?? options.threshold
     const elRootMargin = readAttr(el, 'root-margin') ?? options.rootMargin
 
+    let delayValue: string | null = null
     if (stagger && el instanceof HTMLElement) {
       const explicitDelay = readAttr(el, 'delay')
-      const delayValue =
+      delayValue =
         explicitDelay != null
           ? `${explicitDelay}ms`
           : staggerDelay(nextStaggerIndex(readAttr(el, 'group') ?? ''), stagger)
-
-      if (staggerCssVar !== null) bindCSSVar(el, staggerCssVar, delayValue)
-      if (applyInlineDelay) el.style.setProperty('transition-delay', delayValue)
+      writeStaggerDelay(el, delayValue)
     }
 
     const unobserve = engine.observe(
@@ -154,7 +221,16 @@ export function createRevealController(options: RevealControllerOptions = {}): R
         onEnter: options.onEnter ? (info) => options.onEnter?.(el, info) : undefined,
         onLeave: options.onLeave ? (info) => options.onLeave?.(el, info) : undefined,
       },
-      (info) => applyState(el, info.isIntersecting, elActiveClass)
+      (info) => {
+        if (info.isIntersecting && delayValue !== null && el instanceof HTMLElement) {
+          // Reapplies the same value — a no-op on the very first enter (it's
+          // already there from observeOne above), necessary on a later one if
+          // `once: false` and a previous cycle's cleanup already cleared it.
+          writeStaggerDelay(el, delayValue)
+          scheduleStaggerCleanup(el, delayValue)
+        }
+        applyState(el, info.isIntersecting, elActiveClass)
+      }
     )
     teardownByEl.set(el, unobserve)
   }
@@ -164,6 +240,7 @@ export function createRevealController(options: RevealControllerOptions = {}): R
     if (!teardown) return
     teardown()
     teardownByEl.delete(el)
+    if (el instanceof HTMLElement) pendingStaggerCleanup.get(el)?.()
   }
 
   function scanFor(root: ParentNode) {
