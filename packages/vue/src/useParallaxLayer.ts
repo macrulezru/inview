@@ -13,6 +13,8 @@ export interface UseParallaxLayerOptions {
   easing?: Easing
   /** px offset amplitude at speed 1, default 100 */
   range?: number
+  /** measures viewportProgress relative to this scroll container instead of the window — for a parallax layer inside `overflow: auto`. default null (window) */
+  root?: MaybeRefOrGetter<HTMLElement | null | undefined>
 }
 
 export interface UseParallaxLayerReturn {
@@ -28,7 +30,7 @@ export function useParallaxLayer(
   target: MaybeRefOrGetter<HTMLElement | null | undefined>,
   options: UseParallaxLayerOptions
 ): UseParallaxLayerReturn {
-  const { viewportProgress } = useElementViewport(target)
+  const { viewportProgress } = useElementViewport(target, { root: options.root })
   const axis = options.axis ?? 'y'
   const range = options.range ?? 100
 

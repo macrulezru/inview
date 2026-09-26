@@ -1,5 +1,6 @@
 import { createVisibilityEngine } from './visibility-engine'
 import { staggerDelay, type StaggerDelayOptions } from './utils/staggerDelay'
+import { prefersReducedMotion } from './utils/prefersReducedMotion'
 import type { ObserverPool } from './observer-pool'
 import type { IntersectionInfo } from './types'
 
@@ -53,8 +54,18 @@ export interface RevealControllerOptions {
 }
 
 export interface RevealController {
-  /** Re-scans `selector` for elements not yet observed — useful right after a synchronous DOM change if `watchMutations` is off. */
-  refresh(): void
+  /**
+   * Re-scans for elements not yet observed — useful right after a
+   * synchronous DOM change if `watchMutations` is off. Pass a selector to
+   * scan for something other than the controller's own default `selector`
+   * for this one call (e.g. a narrower one scoped to a subtree you just
+   * rendered), without changing what `watchMutations` itself looks for.
+   */
+  refresh(selector?: string): void
+  /** Starts observing `el` directly, bypassing the `selector` scan entirely — for an element you already have a reference to. A no-op if `el` is already observed. */
+  observe(el: Element): void
+  /** Stops observing `el`, same as if it had been removed from the DOM. */
+  unobserve(el: Element): void
   destroy(): void
 }
 
@@ -94,7 +105,8 @@ function parseBoolean(raw: string | null): boolean | undefined {
  *
  * Every option can be overridden per element via matching data-attributes
  * — `data-reveal-once`, `data-reveal-threshold` (comma-separated for an
- * array), `data-reveal-root-margin`, `data-reveal-class`, `data-reveal-delay`
+ * array), `data-reveal-root-margin`, `data-reveal-class`, `data-reveal-attribute`
+ * (overrides `activeAttribute` for that element only), `data-reveal-delay`
  * (explicit stagger override, ms), `data-reveal-group` (stagger index is
  * counted within a group instead of globally when set) — the controller's
  * own option only applies where the element doesn't say otherwise.
@@ -104,14 +116,19 @@ function parseBoolean(raw: string | null): boolean | undefined {
  */
 export function createRevealController(options: RevealControllerOptions = {}): RevealController {
   if (typeof document === 'undefined') {
-    return { refresh: () => {}, destroy: () => {} }
+    return { refresh: () => {}, observe: () => {}, unobserve: () => {}, destroy: () => {} }
   }
 
   const selector = options.selector ?? DEFAULT_SELECTOR
   const activeClass = options.activeClass === undefined ? DEFAULT_ACTIVE_CLASS : options.activeClass
   const activeAttribute = options.activeAttribute ?? null
   const defaultOnce = options.once ?? true
-  const stagger = options.stagger === false ? null : (options.stagger ?? {})
+  // The class/attribute toggle itself isn't a motion concern — it's the
+  // stagger delay's *timing* that is, so reduced motion disables the delay
+  // the same way `stagger: false` does (no CSS var, no inline style, no
+  // cleanup listener), rather than adding a separate opt-out consumers would
+  // have to remember to wire up themselves.
+  const stagger = options.stagger === false || prefersReducedMotion() ? null : (options.stagger ?? {})
   const staggerCssVar = stagger && stagger.cssVar !== undefined ? stagger.cssVar : DEFAULT_STAGGER_CSS_VAR
   const applyInlineDelay = stagger?.applyInlineDelay ?? true
   const watchRoot = options.watchRoot ?? document.body
@@ -129,11 +146,11 @@ export function createRevealController(options: RevealControllerOptions = {}): R
     return current
   }
 
-  function applyState(el: Element, active: boolean, elActiveClass: string | null) {
+  function applyState(el: Element, active: boolean, elActiveClass: string | null, elActiveAttribute: string | null) {
     if (elActiveClass) el.classList.toggle(elActiveClass, active)
-    if (activeAttribute) {
-      if (active) el.setAttribute(activeAttribute, '')
-      else el.removeAttribute(activeAttribute)
+    if (elActiveAttribute) {
+      if (active) el.setAttribute(elActiveAttribute, '')
+      else el.removeAttribute(elActiveAttribute)
     }
   }
 
@@ -197,6 +214,7 @@ export function createRevealController(options: RevealControllerOptions = {}): R
     if (teardownByEl.has(el)) return
 
     const elActiveClass = readAttr(el, 'class') ?? activeClass
+    const elActiveAttribute = readAttr(el, 'attribute') ?? activeAttribute
     const elOnce = parseBoolean(readAttr(el, 'once')) ?? defaultOnce
     const elThreshold = parseThreshold(readAttr(el, 'threshold')) ?? options.threshold
     const elRootMargin = readAttr(el, 'root-margin') ?? options.rootMargin
@@ -229,7 +247,7 @@ export function createRevealController(options: RevealControllerOptions = {}): R
           writeStaggerDelay(el, delayValue)
           scheduleStaggerCleanup(el, delayValue)
         }
-        applyState(el, info.isIntersecting, elActiveClass)
+        applyState(el, info.isIntersecting, elActiveClass, elActiveAttribute)
       }
     )
     teardownByEl.set(el, unobserve)
@@ -243,9 +261,9 @@ export function createRevealController(options: RevealControllerOptions = {}): R
     if (el instanceof HTMLElement) pendingStaggerCleanup.get(el)?.()
   }
 
-  function scanFor(root: ParentNode) {
-    if (root instanceof Element && root.matches(selector)) observeOne(root)
-    root.querySelectorAll(selector).forEach((el) => observeOne(el))
+  function scanFor(root: ParentNode, sel: string = selector) {
+    if (root instanceof Element && root.matches(sel)) observeOne(root)
+    root.querySelectorAll(sel).forEach((el) => observeOne(el))
   }
 
   function unscanFor(root: Node) {
@@ -270,8 +288,14 @@ export function createRevealController(options: RevealControllerOptions = {}): R
   }
 
   return {
-    refresh() {
-      scanFor(document)
+    refresh(selectorOverride?: string) {
+      scanFor(document, selectorOverride)
+    },
+    observe(el: Element) {
+      observeOne(el)
+    },
+    unobserve(el: Element) {
+      unobserveOne(el)
     },
     destroy() {
       mutationObserver?.disconnect()

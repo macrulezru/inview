@@ -58,4 +58,28 @@ describe('useElementViewport', () => {
 
     expect(result.current.rect.top).toBe(300)
   })
+
+  it('measures viewportProgress relative to a root container instead of the window', () => {
+    const root = document.createElement('div')
+    setRect(root, { top: 100, height: 400 })
+
+    const el = document.createElement('div')
+    setRect(el, { top: 500, height: 100 }) // sits exactly at root's bottom edge
+
+    const { result } = renderHook(() => useElementViewport(el, { root }))
+
+    expect(result.current.viewportProgress).toBe(0)
+  })
+
+  it('keeps rect window-relative regardless of root', () => {
+    const root = document.createElement('div')
+    setRect(root, { top: 100, height: 400 })
+
+    const el = document.createElement('div')
+    setRect(el, { top: 250, height: 100 })
+
+    const { result } = renderHook(() => useElementViewport(el, { root }))
+
+    expect(result.current.rect.top).toBe(250)
+  })
 })

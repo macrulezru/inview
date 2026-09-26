@@ -10,7 +10,17 @@ export interface ModuleOptions {
   defaultOnce?: boolean
 }
 
-const COMPOSABLES = ['useScroll', 'useElementVisibility', 'useElementViewport', 'useParallaxLayer']
+const COMPOSABLES = [
+  'useScroll',
+  'useElementVisibility',
+  'useElementViewport',
+  'useParallaxLayer',
+  'useRevealController',
+  'usePrefersReducedMotion',
+  'useStagger',
+  'useScrollTo',
+  'useScrollSpy',
+]
 const UTILS = ['mapRange', 'bindCSSVar', 'prefersReducedMotion', 'easings', 'clamp', 'staggerDelay']
 // setViewportDefaults is already applied internally from module options (see
 // plugin.client.ts), but wasn't reachable for a consumer wanting to call it
@@ -29,6 +39,8 @@ const CORE_ENGINES = [
   'createVisibilityEngine',
   'createElementTracker',
   'createRevealController',
+  'createScrollSpy',
+  'scrollToElement',
   'observerPool',
   'ObserverPool',
   'rafLoop',

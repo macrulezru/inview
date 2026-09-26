@@ -71,4 +71,82 @@ describe('createVisibilityEngine', () => {
     engine.destroy()
     expect(observer.elements.size).toBe(0)
   })
+
+  describe('handle.update()', () => {
+    it('is still callable as a plain unsubscribe function', () => {
+      const engine = createVisibilityEngine(pool)
+      const el = document.createElement('div')
+
+      const handle = engine.observe(el, {}, () => {})
+      const observer = MockIntersectionObserver.instances[0]
+
+      handle()
+      expect(observer.elements.size).toBe(0)
+    })
+
+    it('swaps onEnter/onLeave live, without re-subscribing', () => {
+      const engine = createVisibilityEngine(pool)
+      const el = document.createElement('div')
+      const firstOnEnter = vi.fn()
+      const secondOnEnter = vi.fn()
+
+      const handle = engine.observe(el, { onEnter: firstOnEnter }, () => {})
+      const observer = MockIntersectionObserver.instances[0]
+
+      handle.update({ onEnter: secondOnEnter })
+
+      observer.trigger([{ target: el, isIntersecting: true, boundingClientRect: { top: 500 } as DOMRectReadOnly }])
+
+      expect(firstOnEnter).not.toHaveBeenCalled()
+      expect(secondOnEnter).toHaveBeenCalledTimes(1)
+      // still the same pooled observer instance — no re-subscribe happened
+      expect(MockIntersectionObserver.instances.length).toBe(1)
+    })
+
+    it('flips once live: an element that was continuous can start unsubscribing after one intersection', () => {
+      const engine = createVisibilityEngine(pool)
+      const el = document.createElement('div')
+
+      const handle = engine.observe(el, { once: false }, () => {})
+      const observer = MockIntersectionObserver.instances[0]
+
+      handle.update({ once: true })
+
+      observer.trigger([{ target: el, isIntersecting: true }])
+      expect(observer.elements.size).toBe(0)
+    })
+
+    it('flips once live the other way: a once observation can become continuous before it first fires', () => {
+      const engine = createVisibilityEngine(pool)
+      const el = document.createElement('div')
+      const cb = vi.fn()
+
+      const handle = engine.observe(el, { once: true }, cb)
+      const observer = MockIntersectionObserver.instances[0]
+
+      handle.update({ once: false })
+
+      observer.trigger([{ target: el, isIntersecting: true }])
+      expect(observer.elements.size).toBe(1)
+
+      observer.trigger([{ target: el, isIntersecting: false }])
+      observer.trigger([{ target: el, isIntersecting: true }])
+      expect(cb).toHaveBeenCalledTimes(3)
+    })
+
+    it('clears onEnter/onLeave to undefined when omitted from the update, rather than keeping the old one', () => {
+      const engine = createVisibilityEngine(pool)
+      const el = document.createElement('div')
+      const onEnter = vi.fn()
+
+      const handle = engine.observe(el, { onEnter }, () => {})
+      const observer = MockIntersectionObserver.instances[0]
+
+      handle.update({})
+
+      observer.trigger([{ target: el, isIntersecting: true, boundingClientRect: { top: 500 } as DOMRectReadOnly }])
+
+      expect(onEnter).not.toHaveBeenCalled()
+    })
+  })
 })

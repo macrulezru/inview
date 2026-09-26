@@ -49,9 +49,39 @@ export interface VisibilityObserveOptions extends ObserverPoolOptions {
   onLeave?: (info: IntersectionInfo) => void
 }
 
+/**
+ * The subset of `VisibilityObserveOptions` a `VisibilityHandle.update()` can
+ * change without tearing down and recreating the underlying pooled
+ * `IntersectionObserver` subscription. `root`/`rootMargin`/`threshold`
+ * aren't here on purpose — pool membership is keyed on them (see
+ * `ObserverPool`), so changing them genuinely requires a fresh `observe()`
+ * call, not a live update.
+ */
+export interface VisibilityLiveOptions {
+  once?: boolean
+  onEnter?: (info: IntersectionInfo) => void
+  onLeave?: (info: IntersectionInfo) => void
+}
+
+/**
+ * Callable exactly like the plain unsubscribe function this used to be
+ * (`handle()` still tears down the observation) — `update()` is additive,
+ * so existing code that only ever calls the return value as a function
+ * keeps working unchanged.
+ */
+export interface VisibilityHandle {
+  (): void
+  /**
+   * Replaces `once`/`onEnter`/`onLeave` wholesale, without re-subscribing —
+   * pass the full current set of live values, not a sparse patch. Omitting
+   * a field here clears it to `undefined`; it does not leave whatever was
+   * previously set in place.
+   */
+  update(options: VisibilityLiveOptions): void
+}
+
 export interface VisibilityEngine {
-  /** returns unsubscribe */
-  observe(el: Element, options: VisibilityObserveOptions, cb: (info: IntersectionInfo) => void): () => void
+  observe(el: Element, options: VisibilityObserveOptions, cb: (info: IntersectionInfo) => void): VisibilityHandle
   destroy(): void
 }
 
@@ -70,6 +100,18 @@ export interface ElementTrackerState {
   viewportProgress: number
   /** px offset of element center from viewport center */
   distanceFromCenter: number
+}
+
+export interface ElementTrackerOptions {
+  /**
+   * Measures `viewportProgress`/`distanceFromCenter` relative to this
+   * scrollable container's bounding rect instead of the window — for an
+   * element scrolling inside `overflow: auto` (a dashboard panel, a modal),
+   * where the window's own dimensions aren't the relevant "viewport" at
+   * all. `rect` itself stays the element's plain (window-relative)
+   * `getBoundingClientRect()` either way. default null (window)
+   */
+  root?: Element | null
 }
 
 export interface ElementTracker {

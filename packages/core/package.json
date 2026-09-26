@@ -1,6 +1,6 @@
 {
   "name": "@macrulez/inview-core",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "Framework-agnostic scroll, visibility and viewport-position engine",
   "license": "MIT",
   "type": "module",

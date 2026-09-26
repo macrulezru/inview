@@ -74,4 +74,86 @@ describe('createElementTracker', () => {
 
     expect(tracker.getState().rect.top).toBe(300)
   })
+
+  describe('with a root container', () => {
+    it('measures viewportProgress relative to root instead of the window', () => {
+      const root = document.createElement('div')
+      setRect(root, { top: 100, height: 400 }) // root spans window y 100..500
+
+      const el = document.createElement('div')
+      // sits exactly at root's bottom edge — "just entering" relative to root
+      setRect(el, { top: 500, height: 100 })
+
+      const withRoot = createElementTracker(el, { root })
+      expect(withRoot.getState().viewportProgress).toBe(0)
+      withRoot.destroy()
+
+      // the same element, same window.innerHeight (600, set in beforeEach),
+      // reports a different (non-zero) progress without root — proving root
+      // actually changes which frame the progress is measured against
+      const withoutRoot = createElementTracker(el)
+      expect(withoutRoot.getState().viewportProgress).toBeCloseTo(100 / 700, 5)
+      withoutRoot.destroy()
+    })
+
+    it('centers distanceFromCenter on root, not the window', () => {
+      const root = document.createElement('div')
+      setRect(root, { top: 100, height: 400 })
+      // root's own center in window coordinates: 100 + 400/2 = 300
+
+      const el = document.createElement('div')
+      setRect(el, { top: 250, height: 100 })
+      // el's center in window coordinates: 250 + 100/2 = 300 — matches root's center
+
+      const tracker = createElementTracker(el, { root })
+      expect(tracker.getState().distanceFromCenter).toBe(0)
+
+      tracker.destroy()
+    })
+
+    it('keeps rect window-relative regardless of root', () => {
+      const root = document.createElement('div')
+      setRect(root, { top: 100, height: 400 })
+
+      const el = document.createElement('div')
+      setRect(el, { top: 250, height: 100 })
+
+      const tracker = createElementTracker(el, { root })
+      expect(tracker.getState().rect.top).toBe(250)
+
+      tracker.destroy()
+    })
+
+    it('matches the window-relative result when root is null', () => {
+      const el = document.createElement('div')
+      setRect(el, { top: 250, height: 100 })
+
+      const withRoot = createElementTracker(el, { root: null })
+      const withoutRoot = createElementTracker(el)
+
+      expect(withRoot.getState()).toEqual(withoutRoot.getState())
+
+      withRoot.destroy()
+      withoutRoot.destroy()
+    })
+
+    it('recomputes on the rAF loop as root itself moves', () => {
+      const root = document.createElement('div')
+      setRect(root, { top: 100, height: 400 })
+
+      const el = document.createElement('div')
+      setRect(el, { top: 250, height: 100 })
+
+      const tracker = createElementTracker(el, { root })
+      expect(tracker.getState().distanceFromCenter).toBe(0)
+
+      setRect(root, { top: 0, height: 400 })
+      raf.flush()
+
+      // root moved up 100px without el moving — el is now 100px below root's center
+      expect(tracker.getState().distanceFromCenter).toBe(100)
+
+      tracker.destroy()
+    })
+  })
 })
