@@ -87,4 +87,98 @@ describe('useElementVisibility', () => {
 
     wrapper.unmount()
   })
+
+  describe('reactive options', () => {
+    it('updates `once` live when passed as a ref, without re-subscribing', async () => {
+      const el = document.createElement('div')
+      const once = ref(false)
+
+      const { wrapper } = withSetup(() => useElementVisibility(ref(el), { once }))
+      await nextTick()
+
+      once.value = true
+      await nextTick()
+
+      const observer = MockIntersectionObserver.instances[0]
+      expect(MockIntersectionObserver.instances.length).toBe(1) // no re-subscribe happened
+
+      observer.trigger([{ target: el, isIntersecting: true }])
+      expect(observer.elements.has(el)).toBe(false) // the live-updated `once: true` took effect
+
+      wrapper.unmount()
+    })
+
+    it('flips `once` back off live too, resuming continuous observation', async () => {
+      const el = document.createElement('div')
+      const once = ref(true)
+
+      const { wrapper } = withSetup(() => useElementVisibility(ref(el), { once }))
+      await nextTick()
+
+      once.value = false
+      await nextTick()
+
+      const observer = MockIntersectionObserver.instances[0]
+      observer.trigger([{ target: el, isIntersecting: true }])
+      expect(observer.elements.has(el)).toBe(true)
+
+      wrapper.unmount()
+    })
+
+    it('re-subscribes (a fresh pooled observer) when threshold changes via a ref', async () => {
+      const el = document.createElement('div')
+      const threshold = ref(0.2)
+
+      const { wrapper } = withSetup(() => useElementVisibility(ref(el), { threshold }))
+      await nextTick()
+
+      expect(MockIntersectionObserver.instances[0].thresholds).toEqual([0.2])
+
+      threshold.value = 0.8
+      await nextTick()
+
+      // a genuinely new pooled observer, keyed on the new threshold
+      expect(MockIntersectionObserver.instances.length).toBe(2)
+      expect(MockIntersectionObserver.instances[1].thresholds).toEqual([0.8])
+      expect(MockIntersectionObserver.instances[0].elements.has(el)).toBe(false)
+      expect(MockIntersectionObserver.instances[1].elements.has(el)).toBe(true)
+
+      wrapper.unmount()
+    })
+
+    it('re-subscribes (a fresh pooled observer) when rootMargin changes via a ref', async () => {
+      const el = document.createElement('div')
+      const rootMargin = ref('0px')
+
+      const { wrapper } = withSetup(() => useElementVisibility(ref(el), { rootMargin }))
+      await nextTick()
+
+      expect(MockIntersectionObserver.instances[0].rootMargin).toBe('0px')
+
+      rootMargin.value = '20px'
+      await nextTick()
+
+      expect(MockIntersectionObserver.instances.length).toBe(2)
+      expect(MockIntersectionObserver.instances[1].rootMargin).toBe('20px')
+      expect(MockIntersectionObserver.instances[0].elements.has(el)).toBe(false)
+      expect(MockIntersectionObserver.instances[1].elements.has(el)).toBe(true)
+
+      wrapper.unmount()
+    })
+
+    it('keeps working unchanged when once/threshold/rootMargin are passed as plain values (not refs)', async () => {
+      const el = document.createElement('div')
+      const { wrapper } = withSetup(() => useElementVisibility(ref(el), { threshold: 0.3, rootMargin: '15px', once: true }))
+      await nextTick()
+
+      const observer = MockIntersectionObserver.instances[0]
+      expect(observer.thresholds).toEqual([0.3])
+      expect(observer.rootMargin).toBe('15px')
+
+      observer.trigger([{ target: el, isIntersecting: true }])
+      expect(observer.elements.has(el)).toBe(false)
+
+      wrapper.unmount()
+    })
+  })
 })

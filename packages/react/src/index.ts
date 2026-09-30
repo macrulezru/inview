@@ -16,6 +16,21 @@ export type { UseElementViewportReturn } from './useElementViewport'
 export { useParallaxLayer } from './useParallaxLayer'
 export type { UseParallaxLayerOptions, UseParallaxLayerReturn } from './useParallaxLayer'
 
+export { useReveal } from './useReveal'
+export type { UseRevealOptions, UseRevealReturn } from './useReveal'
+
+export { useRevealController } from './useRevealController'
+
+export { usePrefersReducedMotion } from './usePrefersReducedMotion'
+
+export { useStagger } from './useStagger'
+
+export { useScrollTo } from './useScrollTo'
+export type { UseScrollToOptions } from './useScrollTo'
+
+export { useScrollSpy } from './useScrollSpy'
+export type { UseScrollSpyOptions } from './useScrollSpy'
+
 // Every @macrulez/inview-core export — createScrollEngine,
 // createVisibilityEngine, createElementTracker, ObserverPool/observerPool,
 // rafLoop, createRevealController, staggerDelay, the utilities, and their

@@ -1,5 +1,12 @@
 import { observerPool as defaultObserverPool, ObserverPool } from './observer-pool'
-import type { IntersectionEdge, IntersectionInfo, VisibilityEngine, VisibilityObserveOptions } from './types'
+import type {
+  IntersectionEdge,
+  IntersectionInfo,
+  VisibilityEngine,
+  VisibilityHandle,
+  VisibilityLiveOptions,
+  VisibilityObserveOptions,
+} from './types'
 
 function computeEdge(entry: IntersectionObserverEntry, wasIntersecting: boolean): IntersectionEdge | undefined {
   if (entry.isIntersecting === wasIntersecting) return undefined
@@ -14,12 +21,24 @@ function computeEdge(entry: IntersectionObserverEntry, wasIntersecting: boolean)
  * `once` support, without any framework-specific reactivity.
  */
 export function createVisibilityEngine(pool: ObserverPool = defaultObserverPool): VisibilityEngine {
-  const unsubs = new Set<() => void>()
+  const unsubs = new Set<VisibilityHandle>()
 
-  function observe(el: Element, options: VisibilityObserveOptions, cb: (info: IntersectionInfo) => void) {
+  function observe(
+    el: Element,
+    options: VisibilityObserveOptions,
+    cb: (info: IntersectionInfo) => void
+  ): VisibilityHandle {
     let wasIntersecting = false
+    // Mutable copy of the subset `update()` can change live — `options`
+    // itself is never mutated, so a caller holding onto its own reference
+    // isn't surprised by it changing out from under them.
+    const live: VisibilityLiveOptions = {
+      once: options.once,
+      onEnter: options.onEnter,
+      onLeave: options.onLeave,
+    }
 
-    const unobserve = pool.observe(el, options, (entry) => {
+    const rawUnobserve = pool.observe(el, options, (entry) => {
       const edge = computeEdge(entry, wasIntersecting)
       wasIntersecting = entry.isIntersecting
 
@@ -31,20 +50,31 @@ export function createVisibilityEngine(pool: ObserverPool = defaultObserverPool)
       }
 
       cb(info)
-      if (edge === 'enter-top' || edge === 'enter-bottom') options.onEnter?.(info)
-      if (edge === 'leave-top' || edge === 'leave-bottom') options.onLeave?.(info)
+      if (edge === 'enter-top' || edge === 'enter-bottom') live.onEnter?.(info)
+      if (edge === 'leave-top' || edge === 'leave-bottom') live.onLeave?.(info)
 
-      if (options.once && entry.isIntersecting) {
-        unsubs.delete(unobserve)
-        unobserve()
+      if (live.once && entry.isIntersecting) {
+        unsubs.delete(handle)
+        rawUnobserve()
       }
     })
 
-    unsubs.add(unobserve)
-    return () => {
-      unsubs.delete(unobserve)
-      unobserve()
-    }
+    const handle = Object.assign(
+      () => {
+        unsubs.delete(handle)
+        rawUnobserve()
+      },
+      {
+        update(next: VisibilityLiveOptions) {
+          live.once = next.once
+          live.onEnter = next.onEnter
+          live.onLeave = next.onLeave
+        },
+      }
+    )
+
+    unsubs.add(handle)
+    return handle
   }
 
   return {

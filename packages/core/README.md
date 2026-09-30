@@ -98,6 +98,14 @@ const stop = engine.observe(
 
 `threshold` arrays are pooled by **value**, not by reference (`ObserverPool`'s key joins the array into a string) — passing a fresh `{ threshold: [0, 0.5] }` literal on every call still reuses the same native observer for matching elements, no need to hoist the array to a shared constant yourself.
 
+`observe()`'s return value is still just callable as a plain unsubscribe function (`stop()`), but it also carries an `.update()` method for changing `once`/`onEnter`/`onLeave` **without** tearing down and recreating the subscription:
+
+```ts
+stop.update({ once: true, onEnter: (info) => console.log('now revealed') })
+```
+
+`root`/`rootMargin`/`threshold` aren't updatable this way — pool membership is keyed on them (see `ObserverPool` above), so changing them genuinely needs a fresh `observe()` call, not a live update. `update()` replaces the whole `{ once, onEnter, onLeave }` set at once rather than merging — omitting a field clears it to `undefined` instead of leaving the previous value in place. This is what every framework adapter's `useElementVisibility` is built on to let `once`/`onEnter`/`onLeave` change reactively (a ref in Vue, a new value on re-render in React) without losing the pooled subscription.
+
 #### `createRevealController(options?)`
 
 Scans the DOM for elements matching a selector and toggles a class/attribute on each as it enters the viewport — the "many elements, some not in the DOM yet" case `createVisibilityEngine`'s one-element-at-a-time `observe()` doesn't cover on its own. Built entirely on the pooled visibility engine above; a `MutationObserver` (default: watching `document.body`) picks up elements added later and unobserves ones removed.
@@ -113,6 +121,9 @@ const controller = createRevealController({
 })
 
 controller.refresh() // manual re-scan (rarely needed — watchMutations covers this by default)
+controller.refresh('[data-fade]') // a one-off scan with a different selector, without changing what watchMutations itself looks for
+controller.observe(el) // observe a specific element directly, bypassing the selector scan entirely
+controller.unobserve(el) // stop observing it again, same as if it had been removed from the DOM
 controller.destroy() // stops observing and disconnects the MutationObserver
 ```
 
@@ -124,6 +135,7 @@ Every option has a per-element `data-reveal-*` override that wins over the contr
 | `data-reveal-threshold="0,0.25,0.5"` | `threshold` (comma-separated for an array) |
 | `data-reveal-root-margin="-10% 0px"` | `rootMargin` |
 | `data-reveal-class="visible"` | `activeClass`, for that element only |
+| `data-reveal-attribute="data-visible"` | `activeAttribute`, for that element only |
 | `data-reveal-delay="140"` | an explicit stagger delay (ms), skipping the computed one |
 | `data-reveal-group="grid-a"` | counts the stagger index within this group instead of globally |
 
@@ -132,6 +144,8 @@ Every option has a per-element `data-reveal-*` override that wins over the contr
 By default the computed stagger delay is written both as the `--reveal-delay` CSS var **and** as an inline `transition-delay` style on the element itself. The inline style is what actually wins the cascade — a `.card { transition: ... }` rule a consumer declares later (a hover transition, say) would otherwise silently override `--reveal-delay`-based `transition-delay` without `!important`. The CSS var keeps being written too (it's what an inheriting selector like `.reveal > .icon { transition-delay: var(--reveal-delay) }` needs, since an inline style doesn't inherit to descendants).
 
 Both are automatically **removed again** once the element's reveal-in transition ends (`transitionend`, with a computed-duration-based fallback timer for when no transition actually runs, e.g. `prefers-reduced-motion`). The delay only exists to stagger that one transition — left on the element afterward, it would also silently delay anything else that transitions there, like a hover effect on a `.reveal` link. This isn't configurable; it's the point of scoping the delay to the reveal in the first place.
+
+Under `prefers-reduced-motion: reduce`, the stagger delay isn't written at all (neither the CSS var nor the inline style) — the class/attribute toggle itself still happens normally, only the staggered *timing* is skipped, the same way `stagger: false` behaves. There's no separate option for this; it's checked automatically, same as `useParallaxLayer` already does for its own transform.
 
 ```ts
 createRevealController({
@@ -160,7 +174,7 @@ staggerDelay(5, { step: 70, max: 3, mode: 'cycle' }) // '70ms' (index 5 wraps to
 
 `createRevealController`'s `stagger` option is built on this — call it directly for a `v-for`/`.map()` reveal effect written by hand instead of through the controller, and pass `mode` through the same way.
 
-#### `createElementTracker(el)`
+#### `createElementTracker(el, options?)`
 
 Tracks an element's position relative to the viewport on the shared rAF loop.
 
@@ -173,9 +187,44 @@ tracker.subscribe((state) => {
 })
 ```
 
-- `rect` — a plain `{ top, left, right, bottom, width, height }` snapshot of `getBoundingClientRect()`.
-- `viewportProgress` — 0..1, from the element entering at the viewport's bottom edge to leaving at its top edge. The core value parallax effects are built on.
-- `distanceFromCenter` — px offset between the element's center and the viewport's center (negative = above center).
+- `rect` — a plain `{ top, left, right, bottom, width, height }` snapshot of `getBoundingClientRect()`. Always window-relative, regardless of `root` below.
+- `viewportProgress` — 0..1, from the element entering at the bottom edge of the tracking frame to leaving at its top edge. The core value parallax effects are built on.
+- `distanceFromCenter` — px offset between the element's center and the tracking frame's center (negative = above center).
+
+By default the "viewport" `viewportProgress`/`distanceFromCenter` are measured against is the window. Pass `root` to measure against a scrollable container's own bounding rect instead — for an element scrolling inside `overflow: auto` (a dashboard panel, a modal), where the window's dimensions aren't the relevant frame at all:
+
+```ts
+const tracker = createElementTracker(el, { root: scrollContainerEl })
+```
+
+#### `scrollToElement(el, options?)`
+
+Scrolls a target (default `window`) so `el` lands at its edge, offset by `offset` px — the "scroll to an element" case `createScrollEngine`'s own `scrollTo` doesn't cover (that one only takes a raw `x`/`y` position, not an element):
+
+```ts
+import { scrollToElement } from '@macrulez/inview-core'
+
+scrollToElement(sectionEl, { offset: 80 }) // e.g. clearing a sticky header
+scrollToElement(sectionEl, { target: scrollContainerEl }) // scroll inside a container instead of the window
+```
+
+Uses the browser's own smooth-scroll animation (`behavior: 'smooth'` by default, `'auto'` under `prefers-reduced-motion`) rather than a hand-rolled rAF loop, so `duration`/easing aren't configurable — pass `behavior: 'auto'` yourself for an instant jump.
+
+#### `createScrollSpy(targets, options?, onChange)`
+
+Tracks which of `targets` currently sits in a thin "active" band near the viewport's vertical center (the common nav-highlight idiom) and reports its index via `onChange` — built entirely on the pooled visibility engine, so every target shares one native `IntersectionObserver`.
+
+```ts
+import { createScrollSpy } from '@macrulez/inview-core'
+
+const spy = createScrollSpy(sectionEls, { rootMargin: '-45% 0px -45% 0px' }, (activeIndex) => {
+  // activeIndex: number | null — the earliest target currently in the band, or null if none are
+})
+
+spy.destroy()
+```
+
+`rootMargin` defaults to `'-45% 0px -45% 0px'` — tune it (and `threshold`) per layout; a page with very short sections might want a narrower band. When more than one target is in the band at once, the earliest one in `targets` wins, matching reading order.
 
 #### `ObserverPool.stats()`
 

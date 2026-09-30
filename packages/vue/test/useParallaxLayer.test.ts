@@ -101,4 +101,21 @@ describe('useParallaxLayer', () => {
 
     wrapper.unmount()
   })
+
+  it('measures progress relative to a root container when passed', async () => {
+    const root = document.createElement('div')
+    setRect(root, { top: 100, height: 400 }) // root spans window y 100..500
+
+    const el = document.createElement('div')
+    // sits exactly at root's bottom edge (progress 0 relative to root); with
+    // window.innerHeight 600 (set in beforeEach) this would NOT be 0 without root
+    setRect(el, { top: 500, height: 100 })
+
+    const { result, wrapper } = withSetup(() => useParallaxLayer(ref(el), { speed: 1, root: ref(root) }))
+    await nextTick()
+
+    expect(result.progress.value).toBe(0)
+
+    wrapper.unmount()
+  })
 })

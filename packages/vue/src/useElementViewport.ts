@@ -1,6 +1,15 @@
 import { onUnmounted, ref, toValue, watch, type MaybeRefOrGetter, type Ref } from 'vue'
 import { createElementTracker, type DOMRectLike, type ElementTracker } from '@macrulez/inview-core'
 
+export interface UseElementViewportOptions {
+  /**
+   * Measures viewportProgress/distanceFromCenter relative to this
+   * scrollable container instead of the window — for an element scrolling
+   * inside `overflow: auto` (a dashboard panel, a modal). default null (window)
+   */
+  root?: MaybeRefOrGetter<HTMLElement | null | undefined>
+}
+
 export interface UseElementViewportReturn {
   rect: Ref<DOMRectLike>
   /** 0..1, from element entering at viewport bottom to leaving at viewport top */
@@ -15,7 +24,8 @@ const emptyRect: DOMRectLike = { top: 0, left: 0, right: 0, bottom: 0, width: 0,
  * viewportProgress and distanceFromCenter, updated on the shared rAF loop.
  */
 export function useElementViewport(
-  target: MaybeRefOrGetter<HTMLElement | null | undefined>
+  target: MaybeRefOrGetter<HTMLElement | null | undefined>,
+  options: UseElementViewportOptions = {}
 ): UseElementViewportReturn {
   const rect = ref<DOMRectLike>(emptyRect)
   const viewportProgress = ref(0)
@@ -36,7 +46,7 @@ export function useElementViewport(
     const el = toValue(target)
     if (!el || typeof window === 'undefined') return
 
-    tracker = createElementTracker(el)
+    tracker = createElementTracker(el, { root: toValue(options.root) ?? null })
     unsubscribe = tracker.subscribe((state) => {
       rect.value = state.rect
       viewportProgress.value = state.viewportProgress
@@ -44,7 +54,7 @@ export function useElementViewport(
     })
   }
 
-  watch(() => toValue(target), setup, { immediate: true })
+  watch(() => [toValue(target), toValue(options.root)] as const, setup, { immediate: true })
   onUnmounted(teardown)
 
   return { rect, viewportProgress, distanceFromCenter }

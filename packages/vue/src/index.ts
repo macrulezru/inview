@@ -18,6 +18,18 @@ export type { RevealDirectiveOptions } from './vReveal'
 
 export { InView } from './InView'
 
+export { useRevealController } from './useRevealController'
+
+export { usePrefersReducedMotion } from './usePrefersReducedMotion'
+
+export { useStagger } from './useStagger'
+
+export { useScrollTo } from './useScrollTo'
+export type { UseScrollToOptions } from './useScrollTo'
+
+export { useScrollSpy } from './useScrollSpy'
+export type { UseScrollSpyOptions } from './useScrollSpy'
+
 // Every @macrulez/inview-core export — createScrollEngine,
 // createVisibilityEngine, createElementTracker, ObserverPool/observerPool,
 // rafLoop, createRevealController, staggerDelay, the utilities, and their

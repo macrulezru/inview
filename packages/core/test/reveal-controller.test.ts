@@ -6,11 +6,26 @@ function flushMutations() {
   return new Promise((resolve) => setTimeout(resolve, 0))
 }
 
+function setMatchMedia(matches: boolean) {
+  window.matchMedia = ((query: string) =>
+    ({
+      matches,
+      media: query,
+      onchange: null,
+      addListener() {},
+      removeListener() {},
+      addEventListener() {},
+      removeEventListener() {},
+      dispatchEvent: () => true,
+    }) as unknown as MediaQueryList) as typeof window.matchMedia
+}
+
 describe('createRevealController', () => {
   let mock: ReturnType<typeof installIntersectionObserverMock>
 
   beforeEach(() => {
     mock = installIntersectionObserverMock()
+    setMatchMedia(false)
   })
 
   afterEach(() => {
@@ -174,6 +189,33 @@ describe('createRevealController', () => {
     controller.destroy()
   })
 
+  it('does not write a stagger delay at all under prefers-reduced-motion', () => {
+    setMatchMedia(true)
+    document.body.innerHTML = '<div class="reveal" id="a"></div><div class="reveal" id="b"></div>'
+    const controller = createRevealController({ stagger: { step: 70 } })
+
+    const a = document.getElementById('a') as HTMLElement
+    const b = document.getElementById('b') as HTMLElement
+    expect(a.style.getPropertyValue('--reveal-delay')).toBe('')
+    expect(a.style.transitionDelay).toBe('')
+    expect(b.style.getPropertyValue('--reveal-delay')).toBe('')
+    expect(b.style.transitionDelay).toBe('')
+
+    controller.destroy()
+  })
+
+  it('still reveals (class/attribute toggle) under prefers-reduced-motion, just without the stagger delay', () => {
+    setMatchMedia(true)
+    document.body.innerHTML = '<div class="reveal"></div>'
+    const el = document.querySelector('.reveal') as HTMLElement
+    const controller = createRevealController({ stagger: { step: 70 } })
+
+    MockIntersectionObserver.instances[0].trigger([{ target: el, isIntersecting: true }])
+    expect(el.classList.contains('in')).toBe(true)
+
+    controller.destroy()
+  })
+
   it('picks up elements added to the DOM later via MutationObserver', async () => {
     const controller = createRevealController()
     expect(MockIntersectionObserver.instances.length).toBe(0)
@@ -240,6 +282,72 @@ describe('createRevealController', () => {
     const controller = createRevealController({ selector: '[data-fade]' })
 
     expect(MockIntersectionObserver.instances[0].elements.size).toBe(1)
+
+    controller.destroy()
+  })
+
+  it('respects a per-element data-reveal-attribute override', () => {
+    document.body.innerHTML = '<div class="reveal" data-reveal-attribute="data-active"></div>'
+    const el = document.querySelector('.reveal') as HTMLElement
+    const controller = createRevealController({ activeAttribute: 'data-reveal-active' })
+
+    MockIntersectionObserver.instances[0].trigger([{ target: el, isIntersecting: true }])
+    expect(el.hasAttribute('data-active')).toBe(true)
+    expect(el.hasAttribute('data-reveal-active')).toBe(false)
+
+    controller.destroy()
+  })
+
+  it('exposes observe()/unobserve() for elements outside the selector scan', () => {
+    const el = document.createElement('div') // deliberately doesn't match the default selector
+    document.body.appendChild(el)
+    const controller = createRevealController()
+
+    expect(MockIntersectionObserver.instances.length).toBe(0)
+
+    controller.observe(el)
+    expect(MockIntersectionObserver.instances[0].elements.has(el)).toBe(true)
+
+    controller.unobserve(el)
+    expect(MockIntersectionObserver.instances[0].elements.has(el)).toBe(false)
+
+    controller.destroy()
+  })
+
+  it('observe() is a no-op for an element already being observed', () => {
+    document.body.innerHTML = '<div class="reveal"></div>'
+    const el = document.querySelector('.reveal') as HTMLElement
+    const controller = createRevealController()
+
+    controller.observe(el)
+    expect(MockIntersectionObserver.instances.length).toBe(1)
+
+    controller.destroy()
+  })
+
+  it('refresh(selector) scans with a one-off selector instead of the controller default', () => {
+    document.body.innerHTML = '<div class="reveal"></div><div data-fade></div>'
+    const controller = createRevealController({ watchMutations: false })
+
+    expect(MockIntersectionObserver.instances[0].elements.size).toBe(1) // only the default .reveal matched at creation
+
+    controller.refresh('[data-fade]')
+    expect(MockIntersectionObserver.instances[0].elements.size).toBe(2)
+
+    controller.destroy()
+  })
+
+  it('refresh() with no argument still uses the controller default selector', async () => {
+    const controller = createRevealController({ watchMutations: false })
+    expect(MockIntersectionObserver.instances.length).toBe(0)
+
+    const el = document.createElement('div')
+    el.className = 'reveal'
+    document.body.appendChild(el)
+    await flushMutations()
+
+    controller.refresh()
+    expect(MockIntersectionObserver.instances[0].elements.has(el)).toBe(true)
 
     controller.destroy()
   })

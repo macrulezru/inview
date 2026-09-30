@@ -21,11 +21,14 @@ for a live example (scroll HUD, reveal animations, parallax layers).
 
 - **`useScroll()`** — reactive scroll state (position, direction, progress, velocity, `isScrolling`) for the window or a scrollable element
 - **`useElementVisibility()`** — reactive `IntersectionObserver`-backed visibility, with enter/leave edge detection and a `once` mode; elements sharing the same options reuse a single observer
-- **`useElementViewport()`** — an element's rect, `viewportProgress` (0..1 through the viewport), and distance from the viewport's center
+- **`useElementViewport()`** — an element's rect, `viewportProgress` (0..1 through the viewport, or a scroll container via `root`), and distance from its center
 - **`useParallaxLayer()`** — a ready-made "layer with its own scroll speed" primitive built on `useElementViewport`, disabling itself automatically under `prefers-reduced-motion`
 - **`v-reveal` directive** — toggles a class/attribute on an element as it enters the viewport, working inside `v-for` out of the box (a directive is DOM-level, not bound to `setup()` the way a composable is)
 - **`<InView>` renderless component** — same idea as `v-reveal`, but exposes the reactive `isVisible`/`ratio` back into the template via a scoped slot, for when a `v-for` item needs the value itself (e.g. to lazily mount a heavy child)
 - **`setViewportDefaults()`** — package-wide fallback for `threshold`/`rootMargin`/`once`, read by `useElementVisibility`, `v-reveal`, and `<InView>` alike, so you don't repeat the same options everywhere
+- **`useRevealController()`** — lifecycle wrapper around `createRevealController`: creates it `onMounted`, destroys it automatically `onUnmounted`
+- **`usePrefersReducedMotion()`** — reactive `prefers-reduced-motion: reduce`, unlike `@macrulez/inview-core`'s static `prefersReducedMotion()` check
+- **`useStagger()`, `useScrollTo()`, `useScrollSpy()`** — reactive `staggerDelay`, scroll-to-element-with-offset, and nav-highlight/scrollspy, respectively
 - **The full `@macrulez/inview-core` surface, re-exported** — `createRevealController`, `createScrollEngine`, `createVisibilityEngine`, `ObserverPool`, `staggerDelay`, and the rest are all available straight from `@macrulez/inview-vue` too, no separate core install needed
 - **SSR-safe by design** — every composable subscribes lazily once its `target` resolves to a real element on the client, no `<ClientOnly>` needed
 
@@ -95,21 +98,36 @@ Elements sharing the same `threshold`/`rootMargin`/`root` reuse a single `Inters
 
 | Option | Default | |
 | --- | --- | --- |
-| `threshold` | `0` | number or number[] |
-| `rootMargin` | `'0px'` | |
-| `root` | viewport | `MaybeRefOrGetter<HTMLElement \| null>` |
-| `once` | `false` | stop observing after the first intersection |
-| `onEnter` / `onLeave` | — | called with `{ isIntersecting, intersectionRatio, boundingClientRect, edge }` |
+| `threshold` | `0` | `MaybeRefOrGetter<number \| number[]>` — changing it re-subscribes |
+| `rootMargin` | `'0px'` | `MaybeRefOrGetter<string>` — changing it re-subscribes |
+| `root` | viewport | `MaybeRefOrGetter<HTMLElement \| null>` — changing it re-subscribes |
+| `once` | `false` | `MaybeRefOrGetter<boolean>` — updates **live**, without re-subscribing |
+| `onEnter` / `onLeave` | — | called with `{ isIntersecting, intersectionRatio, boundingClientRect, edge }` — plain callbacks, not ref-wrapped (see below) |
 
 `threshold`/`rootMargin`/`once` fall back to `viewportDefaults` (see `setViewportDefaults` below) when omitted.
 
-#### `useElementViewport(target)`
+`threshold`/`rootMargin`/`root` determine which pooled `IntersectionObserver` this subscribes to, so changing any of them is a real teardown-and-resubscribe — there's no way around that with a pooled observer. `once` isn't part of that pool key, so passing it as a `ref` updates the live subscription in place instead:
+
+```ts
+const revealOnce = ref(false)
+useElementVisibility(el, { once: revealOnce }) // toggling revealOnce.value later just works, no re-subscribe
+```
+
+`onEnter`/`onLeave` are deliberately **not** reactive-wrapped — unlike `once`, a callback that closes over a `ref`'s `.value` already reads it fresh every time it fires, so there's nothing for a `MaybeRefOrGetter` to add (and wrapping a function in one would be ambiguous with passing a getter *for* the callback itself). Same convention `v-reveal` already documents for its own `onEnter`/`onLeave`.
+
+#### `useElementViewport(target, options?)`
 
 ```ts
 const { rect, viewportProgress, distanceFromCenter } = useElementViewport(el)
 ```
 
-`viewportProgress` (0..1) is the value most parallax effects are built on: 0 when the element just enters at the viewport's bottom edge, 1 when it leaves at the top edge.
+`viewportProgress` (0..1) is the value most parallax effects are built on: 0 when the element just enters at the tracking frame's bottom edge, 1 when it leaves at the top edge. That frame is the window by default; pass `root` to measure against a scrollable container instead, for an element inside `overflow: auto` (a dashboard panel, a modal):
+
+```ts
+const { viewportProgress } = useElementViewport(el, { root: scrollContainer })
+```
+
+`rect` stays the element's plain, window-relative `getBoundingClientRect()` regardless of `root`.
 
 #### `useParallaxLayer(target, options)`
 
@@ -138,6 +156,7 @@ const front = useParallaxLayer(stage, { speed: 1 })
 | `range` | `100` | px offset amplitude at `speed: 1` |
 | `clamp` | `false` | clamp the offset at the 0/1 progress edges instead of extrapolating |
 | `easing` | — | applied to `viewportProgress` before mapping it to an offset — see `easings` from `@macrulez/inview-core` |
+| `root` | window | measure `viewportProgress` against this scroll container instead of the window, same as `useElementViewport`'s own `root` |
 
 #### `setViewportDefaults` / `viewportDefaults`
 
@@ -195,9 +214,87 @@ Renderless wrapper around `useElementVisibility` for when a `v-for` item needs t
 
 Props: `once`, `threshold`, `rootMargin`, `root` (same as `useElementVisibility`), and `as` (the wrapping tag, default `'div'` — an `IntersectionObserver` needs a real element to measure, so `<InView>` always renders one). Emits `enter`/`leave` with the same info object `onEnter`/`onLeave` receive elsewhere.
 
+#### `useRevealController(options?)`
+
+Lifecycle wrapper around `createRevealController` — creates it `onMounted` (so the component's own `.reveal`/`[data-reveal]` elements already exist in the DOM to scan) and destroys it automatically `onUnmounted`, removing the manual `onMounted`/`onUnmounted` boilerplate a page-wide reveal controller otherwise needs:
+
+```ts
+import { useRevealController } from '@macrulez/inview-vue'
+
+useRevealController({ stagger: { step: 70, max: 4 } })
+```
+
+Returns `{ refresh(selector?), observe(el), unobserve(el), destroy() }`, same as `createRevealController` itself. `options` are captured once and used for the controller's whole lifetime — not a reactive `ref`/getter.
+
+#### `usePrefersReducedMotion()`
+
+Reactive `prefers-reduced-motion: reduce`, unlike `@macrulez/inview-core`'s static `prefersReducedMotion()` (a one-shot `matchMedia().matches` read that won't notice the OS setting changing mid-session unless something else happens to re-invoke it):
+
+```ts
+import { usePrefersReducedMotion } from '@macrulez/inview-vue'
+
+const prefersReducedMotion = usePrefersReducedMotion() // Ref<boolean>, updates live
+```
+
+#### `useStagger(index, options?)`
+
+Reactive wrapper around `staggerDelay` — recomputes when `index`/`options` (passed as a ref/getter) change, instead of calling `staggerDelay` by hand in a hand-rolled `v-for` reveal effect:
+
+```ts
+import { useStagger } from '@macrulez/inview-vue'
+
+const delay = useStagger(index, { step: 70, max: 4 }) // ComputedRef<string>
+```
+
+#### `useScrollTo(target?)`
+
+Returns a `scrollTo(el, options?)` callback that smooth-scrolls `target` (default `window`) so `el` lands at its edge — the "scroll to an element, with an offset" case `useScroll()`'s own `scrollTo` doesn't cover (that one only takes a raw `x`/`y` position):
+
+```ts
+import { useScrollTo } from '@macrulez/inview-vue'
+
+const scrollTo = useScrollTo()
+scrollTo(sectionEl.value, { offset: 80 }) // e.g. clearing a sticky header
+```
+
+#### `useScrollSpy(targets, options?)`
+
+Reactively tracks which of `targets` currently sits in the "active" band (see `createScrollSpy` in the core README) and returns its index — the nav-highlight case, built entirely on the pooled visibility engine:
+
+```vue
+<script setup>
+import { useTemplateRef } from 'vue'
+import { useScrollSpy } from '@macrulez/inview-vue'
+
+const sections = useTemplateRef('sections') // an array of elements from v-for
+const activeIndex = useScrollSpy(sections)
+</script>
+
+<template>
+  <nav>
+    <a v-for="(section, i) in sections" :key="i" :class="{ active: activeIndex === i }">...</a>
+  </nav>
+</template>
+```
+
+#### A reading-progress bar, from `useScroll()`
+
+Not its own hook — `useScroll().progress` (0..1) already is the value, so a progress bar is just:
+
+```vue
+<script setup>
+import { useScroll } from '@macrulez/inview-vue'
+const { progress } = useScroll()
+</script>
+
+<template>
+  <div class="progress-bar" :style="{ transform: `scaleX(${progress})` }" />
+</template>
+```
+
 #### Low-level utilities
 
-Every [`@macrulez/inview-core`](https://www.npmjs.com/package/@macrulez/inview-core) export is re-exported here too — `createScrollEngine`, `createVisibilityEngine`, `createElementTracker`, `createRevealController`, `ObserverPool`/`observerPool`, `rafLoop`, `mapRange`, `bindCSSVar`, `prefersReducedMotion`, `clamp`, `staggerDelay`, `easings`, and their types. Reach for `createRevealController` directly (rather than `v-reveal` per element) for a page-wide "every `.reveal`/`[data-reveal]` element, including ones that don't exist yet" pass — see
+Every [`@macrulez/inview-core`](https://www.npmjs.com/package/@macrulez/inview-core) export is re-exported here too — `createScrollEngine`, `createVisibilityEngine`, `createElementTracker`, `createRevealController`, `createScrollSpy`, `scrollToElement`, `ObserverPool`/`observerPool`, `rafLoop`, `mapRange`, `bindCSSVar`, `prefersReducedMotion`, `clamp`, `staggerDelay`, `easings`, and their types. Reach for `createRevealController` directly (rather than `v-reveal` per element) for a page-wide "every `.reveal`/`[data-reveal]` element, including ones that don't exist yet" pass — see
 [`@macrulez/inview-core`'s README](https://www.npmjs.com/package/@macrulez/inview-core)
 for its full option list and every other signature here.
 
